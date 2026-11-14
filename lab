@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Обёртка для macOS / Linux / Git Bash. На Windows (cmd, PowerShell) используйте lab.cmd.
+set -e
+cd "$(dirname "$0")"
+case "$1" in
+  up)
+    docker compose up -d --wait db
+    docker compose --profile tools build lab
+    ;;
+  down)
+    docker compose down
+    ;;
+  *)
+    docker compose --profile tools run --rm lab "$@"
+    ;;
+esac

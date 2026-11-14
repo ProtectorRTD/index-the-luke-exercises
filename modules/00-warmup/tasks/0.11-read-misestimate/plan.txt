@@ -1,0 +1,26 @@
+Limit  (cost=29000.61..29000.61 rows=3 width=11) (actual time=340.062..340.068 rows=3 loops=1)
+  Buffers: shared hit=11715
+  ->  Sort  (cost=29000.61..29000.66 rows=21 width=11) (actual time=340.060..340.064 rows=3 loops=1)
+        Sort Key: (count(*)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=11715
+        ->  HashAggregate  (cost=29000.12..29000.33 rows=21 width=11) (actual time=340.034..340.041 rows=21 loops=1)
+              Group Key: c.country
+              Batches: 1  Memory Usage: 24kB
+              Buffers: shared hit=11712
+              ->  Hash Join  (cost=3658.00..28975.12 rows=5000 width=3) (actual time=128.152..302.268 rows=359294 loops=1)
+                    Hash Cond: (o.customer_id = c.id)
+                    Buffers: shared hit=11712
+                    ->  Seq Scan on orders o  (cost=0.00..25304.00 rows=5000 width=8) (actual time=101.064..173.940 rows=359294 loops=1)
+                          Filter: (EXTRACT(year FROM created_at) = '2025'::numeric)
+                          Rows Removed by Filter: 640706
+                          Buffers: shared hit=10304
+                    ->  Hash  (cost=2408.00..2408.00 rows=100000 width=11) (actual time=26.593..26.595 rows=100000 loops=1)
+                          Buckets: 131072  Batches: 1  Memory Usage: 5712kB
+                          Buffers: shared hit=1408
+                          ->  Seq Scan on customers c  (cost=0.00..2408.00 rows=100000 width=11) (actual time=0.012..10.378 rows=100000 loops=1)
+                                Buffers: shared hit=1408
+Planning:
+  Buffers: shared hit=130
+Planning Time: 0.461 ms
+Execution Time: 340.167 ms

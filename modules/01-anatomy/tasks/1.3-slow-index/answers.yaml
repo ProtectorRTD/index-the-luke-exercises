@@ -1,0 +1,14 @@
+# Задание 1.3. Впишите ответы после двоеточия.
+# Узлы пишите как в плане (например: Seq Scan), buffers — числом.
+
+# Обычный клиент 54321
+scan_one:            # какой узел читает orders
+buffers_one:         # сколько страниц прочитал запрос
+
+# Оптовики, план по умолчанию
+scan_heavy:
+buffers_heavy:
+
+# Оптовики с enable_seqscan = off и enable_bitmapscan = off
+scan_heavy_forced:
+buffers_heavy_forced:

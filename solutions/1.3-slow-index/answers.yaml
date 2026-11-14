@@ -1,0 +1,28 @@
+# {heavy} подставляется по масштабу: 1000 на s, 10000 на m.
+scan_one:
+  label: узел для обычного клиента (scan_one)
+  plan: { query: "SELECT sum(total) FROM orders WHERE customer_id = 54321", extract: "scan_node:orders" }
+buffers_one:
+  label: страниц для обычного клиента (buffers_one)
+  tolerance: 0.02
+  plan: { query: "SELECT sum(total) FROM orders WHERE customer_id = 54321", extract: buffers }
+scan_heavy:
+  label: узел для оптовиков (scan_heavy)
+  plan: { query: "SELECT sum(total) FROM orders WHERE customer_id <= {heavy}", extract: "scan_node:orders" }
+buffers_heavy:
+  label: страниц для оптовиков (buffers_heavy)
+  tolerance: 0.02
+  plan: { query: "SELECT sum(total) FROM orders WHERE customer_id <= {heavy}", extract: buffers }
+scan_heavy_forced:
+  label: узел для оптовиков без seqscan и bitmap (scan_heavy_forced)
+  plan:
+    query: "SELECT sum(total) FROM orders WHERE customer_id <= {heavy}"
+    settings: { enable_seqscan: "off", enable_bitmapscan: "off" }
+    extract: "scan_node:orders"
+buffers_heavy_forced:
+  label: страниц для оптовиков без seqscan и bitmap (buffers_heavy_forced)
+  tolerance: 0.02
+  plan:
+    query: "SELECT sum(total) FROM orders WHERE customer_id <= {heavy}"
+    settings: { enable_seqscan: "off", enable_bitmapscan: "off" }
+    extract: buffers

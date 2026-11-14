@@ -1,0 +1,24 @@
+# Эталон считается на живой базе, поэтому подходит для любого масштаба.
+level:
+  label: уровней над листьями (level)
+  sql: SELECT level FROM bt_metap('orders_created_at_idx')
+depth:
+  label: глубина спуска (depth)
+  sql: SELECT level + 1 FROM bt_metap('orders_created_at_idx')
+root_items:
+  label: записей в корне (root_items)
+  sql: SELECT live_items FROM bt_page_stats('orders_created_at_idx', (SELECT root FROM bt_metap('orders_created_at_idx'))::int)
+leaf_pages:
+  label: листовых страниц (leaf_pages)
+  sql: >
+    SELECT count(*) FROM generate_series(1, (pg_relation_size('orders_created_at_idx') / 8192)::int - 1) b,
+    bt_page_stats('orders_created_at_idx', b) s WHERE s.type = 'l'
+entries_per_leaf:
+  label: записей на лист в среднем (entries_per_leaf)
+  tolerance: 0.05
+  sql: >
+    SELECT round(avg(s.live_items)) FROM generate_series(1, (pg_relation_size('orders_created_at_idx') / 8192)::int - 1) b,
+    bt_page_stats('orders_created_at_idx', b) s WHERE s.type = 'l'
+lookup_buffers:
+  label: страниц при поиске одного заказа (lookup_buffers)
+  sql: SELECT level + 2 FROM bt_metap('orders_created_at_idx')

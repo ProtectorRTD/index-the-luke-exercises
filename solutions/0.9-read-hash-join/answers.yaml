@@ -1,0 +1,22 @@
+# Эталон ответов: план статичный, значения фиксированы.
+join_node:
+  label: "каким узлом соединяются таблицы (join_node)"
+  value: "Hash Join"
+hash_table:
+  label: "какая таблица (orders или customers) сложена в хеш-таблицу (hash_table)"
+  value: ["customers", "c"]
+orders_rows_removed:
+  label: "сколько строк orders прочитано и отброшено фильтром (orders_rows_removed)"
+  value: 994993
+orders_buffers:
+  label: "сколько страниц прочитал узел, читающий orders (orders_buffers)"
+  value: 10304
+total_buffers:
+  label: "сколько страниц прочитал весь запрос (total_buffers)"
+  value: 11712
+customers_estimated:
+  label: "сколько строк из customers ожидал планировщик (customers_estimated)"
+  value: 1863
+customers_actual:
+  label: "сколько строк из customers вернулось на самом деле (customers_actual)"
+  value: 1941

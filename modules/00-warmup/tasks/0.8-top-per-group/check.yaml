@@ -1,0 +1,6 @@
+id: "0.8"
+title: Топ-3 товара в каждой категории
+type: query
+ordered: true
+rules:
+  - results_equal: true

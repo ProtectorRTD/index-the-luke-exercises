@@ -1,0 +1,6 @@
+id: "0.7"
+title: Нарастающий итог и динамика
+type: query
+ordered: true
+rules:
+  - results_equal: true

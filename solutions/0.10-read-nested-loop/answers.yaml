@@ -1,0 +1,20 @@
+# Эталон ответов: план статичный, значения фиксированы.
+join_node:
+  label: "каким узлом соединяются таблицы (join_node)"
+  value: "Nested Loop"
+outer_table:
+  label: "какая таблица читается во внешнем цикле (orders или customers) (outer_table)"
+  value: ["customers", "c"]
+inner_loops:
+  label: "сколько раз выполнился узел, читающий orders (inner_loops)"
+  value: 10
+inner_rows_per_loop:
+  label: "сколько строк orders он возвращал за одно выполнение (как в плане) (inner_rows_per_loop)"
+  value: 507
+inner_rows_total:
+  label: "сколько строк orders он вернул за все выполнения вместе (inner_rows_total)"
+  value: 5070
+  tolerance: 0.01
+inner_expected_per_loop:
+  label: "сколько строк за одно выполнение ожидал планировщик (inner_expected_per_loop)"
+  value: 40

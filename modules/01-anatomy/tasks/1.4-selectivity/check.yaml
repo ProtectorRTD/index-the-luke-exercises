@@ -1,0 +1,23 @@
+id: "1.4"
+title: Три плана одного запроса
+type: query
+parts:
+  - file: a.sql
+    rules:
+      - must_match:
+          pattern: '^\s*SELECT\s+count\s*\(\s*\*\s*\)\s*,\s*min\s*\(\s*email\s*\)\s+FROM\s+customers\s+WHERE\b.*\bcreated_at\b'
+          message: запрос вида SELECT count(*), min(email) FROM customers WHERE <условие на created_at>
+      - must_have_node: { node: Index Scan, relation: customers, index: customers_created_at_idx }
+  - file: b.sql
+    rules:
+      - must_match:
+          pattern: '^\s*SELECT\s+count\s*\(\s*\*\s*\)\s*,\s*min\s*\(\s*email\s*\)\s+FROM\s+customers\s+WHERE\b.*\bcreated_at\b'
+          message: запрос вида SELECT count(*), min(email) FROM customers WHERE <условие на created_at>
+      - must_have_node: { node: Bitmap Heap Scan, relation: customers }
+      - must_have_node: { node: Bitmap Index Scan, index: customers_created_at_idx }
+  - file: c.sql
+    rules:
+      - must_match:
+          pattern: '^\s*SELECT\s+count\s*\(\s*\*\s*\)\s*,\s*min\s*\(\s*email\s*\)\s+FROM\s+customers\s+WHERE\b.*\bcreated_at\b'
+          message: запрос вида SELECT count(*), min(email) FROM customers WHERE <условие на created_at>
+      - must_have_node: { node: Seq Scan, relation: customers }

@@ -1,0 +1,6 @@
+id: "0.5"
+title: Австрийцы с крупными заказами
+type: query
+ordered: true
+rules:
+  - results_equal: true
