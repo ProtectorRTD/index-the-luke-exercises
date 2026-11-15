@@ -26,12 +26,12 @@ SOLUTIONS = ROOT / "solutions"
 STATE_FILE = ROOT / ".lab" / "state.json"
 
 SCALES = {
-    "s": dict(n_customers=100_000, n_products=10_000, n_orders=1_000_000, n_events=2_000_000),
-    "m": dict(n_customers=1_000_000, n_products=50_000, n_orders=10_000_000, n_events=20_000_000),
+    "s": dict(n_customers=100_000, n_products=10_000, n_orders=1_000_000, n_events=2_000_000, n_tickets=500_000),
+    "m": dict(n_customers=1_000_000, n_products=50_000, n_orders=10_000_000, n_events=20_000_000, n_tickets=5_000_000),
 }
 # Подстановки в эталонах ответов: «оптовики» — первый 1% клиентов, они делают половину заказов.
 SCALE_VARS = {"s": {"heavy": "1000"}, "m": {"heavy": "10000"}}
-BASE_TABLES = ["categories", "customers", "products", "orders", "order_items", "events"]
+BASE_TABLES = ["categories", "customers", "products", "orders", "order_items", "events", "tickets", "tags", "ticket_tags"]
 
 # Что нельзя писать ни в одном решении: это обходы планировщика, а не решения.
 DEFAULT_FORBIDDEN = [
@@ -48,7 +48,14 @@ TYPE_NAMES = {
     "index": "индексы",
     "query": "запросы",
     "mixed": "индексы и запросы",
-    "answers": "ответы по плану",
+    "answers": "ответы",
+}
+
+LEVEL_NAMES = {
+    "base": "база",
+    "calc": "расчёт",
+    "design": "проектирование",
+    "investigate": "расследование",
 }
 
 USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
@@ -329,14 +336,21 @@ def run_rows(query, *, writes=False, settings=None, timeout_s=300):
     return [tuple(normalize_value(x) for x in row) for row in csv.reader(io.StringIO(out))]
 
 
-def explain(query, *, writes=False, settings=None, runs=2, timeout_s=300):
-    plans = []
-    for _ in range(runs):
-        script = (tx_begin(writes) + f"\nSET LOCAL statement_timeout = '{timeout_s}s';\n"
-                  + settings_sql(settings)
-                  + f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {query};\nROLLBACK;\n")
-        out = psql(script, timeout=timeout_s + 30)
-        plans.append(json.loads(out)[0])
+def explain(query, *, writes=False, settings=None, runs=2, timeout_s=300, pre=None):
+    """Снимает план. Все прогоны идут в одной сессии, возвращается последний:
+    первое обращение к таблице или индексу в сессии читает на несколько страниц больше."""
+    block = (tx_begin(writes or bool(pre)) + f"\nSET LOCAL statement_timeout = '{timeout_s}s';\n"
+             + settings_sql(settings) + (pre.rstrip().rstrip(";") + ";\n" if pre else "")
+             + f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {query};\nROLLBACK;\n")
+    out = psql(block * runs, timeout=(timeout_s + 30) * runs)
+    decoder, pos, plans = json.JSONDecoder(), 0, []
+    while True:
+        while pos < len(out) and out[pos].isspace():
+            pos += 1
+        if pos >= len(out):
+            break
+        doc, pos = decoder.raw_decode(out, pos)
+        plans.append(doc[0])
     return plans[-1]
 
 
@@ -363,6 +377,18 @@ def rows_removed(plan):
     for node, _ in walk(plan["Plan"]):
         total += float(node.get("Rows Removed by Filter", 0)) * float(node.get("Actual Loops", 1))
     return int(round(total))
+
+
+def row_misestimate(plan):
+    """Во сколько раз оценка числа строк расходится с фактом, максимум по узлам плана."""
+    worst = 1.0
+    for node, _ in walk(plan["Plan"]):
+        if float(node.get("Actual Loops", 1)) == 0:
+            continue
+        est = max(float(node.get("Plan Rows", 1)), 1.0)
+        act = max(float(node.get("Actual Rows", 0)), 1.0)
+        worst = max(worst, est / act, act / est)
+    return worst
 
 
 _index_table_cache = {}
@@ -480,6 +506,9 @@ def eval_plan_rule(name, arg, plan, scale):
         ios = [n for n, _ in walk(plan["Plan"]) if n["Node Type"] == "Index Only Scan"]
         ok = bool(ios) and all(int(n.get("Heap Fetches", 0)) == 0 for n in ios)
         return ok, "Index Only Scan без походов в таблицу (Heap Fetches = 0)"
+    if name == "max_row_misestimate":
+        got = row_misestimate(plan)
+        return got <= arg, f"оценка числа строк расходится с фактом не больше чем в {arg} раз (сейчас в {got:.0f})"
     raise LabError(f"неизвестное правило {name}")
 
 
@@ -494,7 +523,7 @@ def describe_node(spec):
 
 
 PLAN_RULES = {"must_have_node", "must_not_have_node", "index_cond_contains", "max_buffers",
-              "min_buffers", "max_rows_removed_by_filter", "heap_fetches_zero"}
+              "min_buffers", "max_rows_removed_by_filter", "heap_fetches_zero", "max_row_misestimate"}
 
 
 # ---------------------------------------------------------------------------
@@ -538,19 +567,12 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def prediction_filled(task):
-    path = task["dir"] / "prediction.md"
-    if not path.exists():
-        return True
-    lines = path.read_text(encoding="utf-8").splitlines()
-    return not any(line.strip() == ">" for line in lines)
-
-
 class Result:
     def __init__(self):
         self.items = []  # (ok, text)
         self.error = None
         self.plans = []  # (title, before, after)
+        self.score = []  # строки со счётом для заданий на проектирование
 
     def add(self, ok, text):
         self.items.append((ok, text))
@@ -571,10 +593,11 @@ def apply_index_solution(task, path, res, limits):
         raise LabError(f"нет файла {path.relative_to(ROOT)}")
     stmts = split_sql(path.read_text(encoding="utf-8"))
     if not stmts:
-        raise LabError(f"{path.name} пустой: создайте индекс")
-    bad = [s for s in stmts if not INDEX_TASK_ALLOWED.match(s)]
+        raise LabError(f"{path.name} пустой: в нём пока нет ни одной команды")
+    extra = [re.compile(p, re.I) for p in task.get("allowed_sql", [])]
+    bad = [s for s in stmts if not INDEX_TASK_ALLOWED.match(s) and not any(p.match(s) for p in extra)]
     if bad:
-        raise LabError("в задании на индексы разрешены только CREATE INDEX, DROP INDEX, ANALYZE, VACUUM. "
+        raise LabError("в этом задании разрешены только CREATE INDEX, DROP INDEX, ANALYZE, VACUUM. "
                        f"Лишнее: «{short(bad[0], 50)}»")
     problems = check_forbidden(stmts, task.get("forbidden_sql", []))
     if problems:
@@ -598,10 +621,13 @@ def apply_index_solution(task, path, res, limits):
         size = sum(v[1] for v in new.values()) / 1024 / 1024
         res.add(size <= limits["max_index_size_mb"],
                 f"новые индексы занимают не больше {limits['max_index_size_mb']} МБ ({size:.1f} МБ)")
+    for chk in task.get("post_checks", []):
+        res.add(scalar(f"SELECT ({chk['sql']})::boolean") == "t", chk["message"])
     return new
 
 
-def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, baseline=None):
+def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, baseline=None,
+                   force_plan=False):
     writes = bool(task.get("writes"))
     settings = task.get("settings")
     rules = spec.get("rules", [])
@@ -636,7 +662,7 @@ def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, b
         res.add(ok, prefix + "результат совпадает с эталоном" + ("" if not ordered else ", включая порядок")
                 + detail)
     plan_rules = [r for r in rules if rule_label(r)[0] in PLAN_RULES]
-    if not plan_rules:
+    if not plan_rules and not force_plan:
         return
     plan = explain(query, writes=writes, settings=settings)
     for r in plan_rules:
@@ -675,10 +701,17 @@ def compute_expected(spec, scale):
         return scalar(subst(spec["sql"], scale))
     if "plan" in spec:
         p = spec["plan"]
-        plan = explain(subst(p["query"], scale), settings=p.get("settings"))
+        plan = explain(subst(p["query"], scale), settings=p.get("settings"),
+                       pre=subst(p["pre"], scale) if p.get("pre") else None)
         what = p["extract"]
         if what == "buffers":
             return total_buffers(plan)
+        if what == "total_cost":
+            return plan["Plan"]["Total Cost"]
+        if what == "plan_rows":
+            return plan["Plan"]["Plan Rows"]
+        if what == "actual_rows":
+            return plan["Plan"]["Actual Rows"]
         if what.startswith("scan_node:"):
             return scan_node_type(plan, what.split(":", 1)[1])
         if what == "rows_removed":
@@ -692,12 +725,15 @@ def norm_text(v):
 
 
 def answer_matches(got, expected, spec):
+    if isinstance(got, bool):  # YAML читает yes/no как логические значения
+        got = "yes" if got else "no"
     tolerance = spec.get("tolerance", 0) if isinstance(spec, dict) else 0
+    slack = spec.get("abs", 0) if isinstance(spec, dict) else 0
     alts = expected if isinstance(expected, list) else [expected]
     for exp in alts:
         try:
             g, e = float(str(got).replace(",", ".")), float(exp)
-            if abs(g - e) <= abs(e) * tolerance + 1e-9:
+            if abs(g - e) <= max(abs(e) * tolerance, slack) + 1e-9:
                 return True
             continue
         except (TypeError, ValueError):
@@ -739,8 +775,6 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
     try:
         reset_db(quiet=source != "student")
         run_setup(task)
-        if source == "student" and not prediction_filled(task):
-            res.add(False, "prediction.md заполнен (строки «>» с прогнозом не пустые)")
         if ttype == "answers":
             check_answers(task, res, scale, answers_override)
             return res
@@ -753,13 +787,24 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
             parts = task.get("parts") or [dict(task, file="query.sql", label="")]
             queries = [read_query_file(task["dir"] / p["file"]) for p in parts]
             befores = [explain(q, runs=1) if show_baseline else None for q in queries]
-            apply_index_solution(task, files.get("solution.sql", task["dir"] / "solution.sql"), res, limits)
+            new_indexes = apply_index_solution(task, files.get("solution.sql", task["dir"] / "solution.sql"),
+                                               res, limits)
+            total = task.get("total") or {}
             for part, query, before in zip(parts, queries, befores):
                 label = part.get("label", part["file"]) if task.get("parts") else ""
                 n_plans = len(res.plans)
-                evaluate_query(task, part, query, res, scale, label=label, reference=query)
+                evaluate_query(task, part, query, res, scale, label=label, reference=query,
+                               force_plan=bool(total))
                 if len(res.plans) > n_plans:
                     res.plans[-1] = (label, before, res.plans[-1][2])
+            if total:
+                pages = sum(total_buffers(p[2]) for p in res.plans)
+                if "max_total_buffers" in total:
+                    limit = total["max_total_buffers"][scale]
+                    res.add(pages <= limit, f"все запросы вместе читают не больше {limit} страниц (сейчас {pages})")
+                size_mb = sum(v[1] for v in new_indexes.values()) / 1024 / 1024
+                res.score.append(f"страниц на все запросы: {pages} · новых индексов: {len(new_indexes)} "
+                                 f"· их размер: {size_mb:.1f} МБ")
         elif ttype == "mixed":
             apply_index_solution(task, files.get("indexes.sql", task["dir"] / "indexes.sql"), res, limits)
             sol = files.get("solution.sql", task["dir"] / "solution.sql")
@@ -803,7 +848,8 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
 
 def print_result(task, res, verbose_plan=True):
     print()
-    print(bold(f"Задание {task['id']}. {task['title']}") + dim(f"  [{TYPE_NAMES[task['type']]}]"))
+    print(bold(f"Задание {task['id']}. {task['title']}")
+          + dim(f"  [{LEVEL_NAMES[task.get('level', 'base')]} · {TYPE_NAMES[task['type']]}]"))
     for ok, text in res.items:
         mark = green("  [OK]  ") if ok else red("  [FAIL]")
         print(f"{mark} {text}")
@@ -817,6 +863,8 @@ def print_result(task, res, verbose_plan=True):
             print(f"\n  {'Стало' if before is not None else 'План'}"
                   f"{(' (' + label + ')') if label else ''}: {plan_summary(after)}")
             print(format_plan(after))
+    for line in res.score:
+        print(bold("\n  Счёт: ") + line)
     print()
     print(bold("  ИТОГ: ") + (green(bold("PASS")) if res.passed else red(bold("FAIL"))))
     print()
@@ -899,7 +947,7 @@ def cmd_hint(args):
 
 def cmd_status(args):
     state = load_state()
-    print(bold("Задание  Тип                 Статус  Подсказок  Название"))
+    print(bold("Задание  Уровень         Тип                 Статус  Подсказок  Название"))
     current = None
     for t in all_tasks():
         mod = t["module_dir"].name
@@ -910,7 +958,8 @@ def cmd_status(args):
         s = r["status"] if r else "-"
         s_col = green(s.ljust(6)) if s == "PASS" else red(s.ljust(6)) if s == "FAIL" else s.ljust(6)
         hints = state["hints"].get(str(t["id"]), 0)
-        print(f"{str(t['id']).ljust(8)} {TYPE_NAMES[t['type']].ljust(19)} {s_col}  {str(hints).ljust(9)}  {t['title']}")
+        print(f"{str(t['id']).ljust(8)} {LEVEL_NAMES[t.get('level', 'base')].ljust(15)} "
+              f"{TYPE_NAMES[t['type']].ljust(19)} {s_col}  {str(hints).ljust(9)}  {t['title']}")
     passed = sum(1 for r in state["results"].values() if r["status"] == "PASS")
     print(dim(f"\nПройдено {passed} из {len(all_tasks())}. Масштаб базы: {current_scale() or 'не сгенерирована'}"))
 
@@ -927,6 +976,17 @@ def cmd_demo(args):
 
 def cmd_psql(args):
     os.execvp("psql", ["psql"] + args.rest)
+
+
+def cmd_expected(args):
+    """Для автора: показать эталонные значения задания с ответами."""
+    task = find_task(args.task)
+    scale = require_seed()
+    reset_db(quiet=True)
+    run_setup(task)
+    for key, spec in load_expected_answers(task).items():
+        print(f"{key}: {compute_expected(spec, scale)}")
+    reset_db(quiet=True)
 
 
 def cmd_selftest(args):
@@ -1056,6 +1116,10 @@ def main(argv=None):
     s = sub.add_parser("psql", help="открыть psql")
     s.add_argument("rest", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_psql)
+
+    s = sub.add_parser("expected", help="для автора: эталонные ответы задания")
+    s.add_argument("task")
+    s.set_defaults(fn=cmd_expected)
 
     s = sub.add_parser("selftest", help="для автора: эталоны проходят, заготовки и ловушки падают")
     s.add_argument("--module", type=int)

@@ -79,6 +79,37 @@ GROUP BY s.type;
 
 `generate_series(a, b)` выдаёт числа от a до b. Здесь она перебирает номера страниц, и для каждой вызывается `bt_page_stats`.
 
+## Что планировщик знает о таблице
+
+```sql
+-- размер таблицы и индекса глазами планировщика
+SELECT relname, relpages, reltuples FROM pg_class WHERE relname IN ('customers', 'customers_pkey');
+
+-- статистика по колонке: частые значения, их доли, связь с физическим порядком строк
+SELECT most_common_vals, most_common_freqs, n_distinct, correlation
+FROM pg_stats WHERE tablename = 'customers' AND attname = 'country';
+
+-- коэффициенты стоимости
+SHOW seq_page_cost;  SHOW random_page_cost;  SHOW cpu_tuple_cost;  SHOW cpu_operator_cost;
+```
+
+`correlation` близка к 1 или −1, если строки лежат на диске в порядке этой колонки, и к 0, если вразброс.
+
+## Состояние индекса
+
+```sql
+-- уровни, число листьев, заполненность листьев в процентах
+SELECT tree_level, leaf_pages, avg_leaf_density FROM pgstatindex('orders_pkey');
+
+REINDEX INDEX orders_pkey;   -- перестроить индекс заново
+```
+
+## Экспоненту считает сама база
+
+```sql
+SELECT 1408 * (1 - exp(-1400.0 / 1408));   -- ожидаемое число разных страниц для 1400 случайных строк
+```
+
 ## Подсмотреть альтернативный план (только в psql, не в решениях)
 
 ```sql

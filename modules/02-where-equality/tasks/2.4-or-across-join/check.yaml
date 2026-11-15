@@ -1,0 +1,8 @@
+id: "2.4"
+title: OR через JOIN
+type: query
+rules:
+  - results_equal: true
+  - must_not_have_node: { node: Seq Scan, relation: orders }
+  - must_not_have_node: { node: Seq Scan, relation: customers }
+  - max_buffers: { s: 60, m: 800 }

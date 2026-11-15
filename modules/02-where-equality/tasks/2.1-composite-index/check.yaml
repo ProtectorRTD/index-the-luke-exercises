@@ -1,0 +1,10 @@
+id: "2.1"
+title: Составной индекс
+type: index
+limits:
+  max_indexes: 1
+rules:
+  - results_equal: true
+  - index_cond_contains: { relation: orders, columns: [customer_id, status] }
+  - max_rows_removed_by_filter: 0
+  - max_buffers: { s: 30, m: 30 }

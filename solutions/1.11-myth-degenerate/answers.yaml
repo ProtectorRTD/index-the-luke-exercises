@@ -1,0 +1,41 @@
+level_fresh:
+  label: уровней над листьями, свежий (level_fresh)
+  sql: SELECT tree_level FROM pgstatindex('sessions_fresh_user_idx')
+level_churned:
+  label: уровней над листьями, после чистки (level_churned)
+  sql: SELECT tree_level FROM pgstatindex('sessions_churned_user_idx')
+leaf_pages_fresh:
+  label: листьев, свежий (leaf_pages_fresh)
+  sql: SELECT leaf_pages FROM pgstatindex('sessions_fresh_user_idx')
+leaf_pages_churned:
+  label: листьев, после чистки (leaf_pages_churned)
+  sql: SELECT leaf_pages FROM pgstatindex('sessions_churned_user_idx')
+density_churned:
+  label: заполненность листа после чистки, % (density_churned)
+  tolerance: 0.10
+  sql: SELECT avg_leaf_density FROM pgstatindex('sessions_churned_user_idx')
+range_rows_fresh:
+  label: строк в диапазоне, свежая (range_rows_fresh)
+  sql: SELECT count(*) FROM sessions_fresh WHERE user_id BETWEEN 1 AND {heavy}
+range_rows_churned:
+  label: строк в диапазоне, после чистки (range_rows_churned)
+  sql: SELECT count(*) FROM sessions_churned WHERE user_id BETWEEN 1 AND {heavy}
+range_buffers_fresh:
+  label: страниц на диапазон, свежая (range_buffers_fresh)
+  tolerance: 0.10
+  plan: { query: "SELECT count(*) FROM sessions_fresh WHERE user_id BETWEEN 1 AND {heavy}", extract: buffers }
+range_buffers_churned:
+  label: страниц на диапазон, после чистки (range_buffers_churned)
+  tolerance: 0.10
+  plan: { query: "SELECT count(*) FROM sessions_churned WHERE user_id BETWEEN 1 AND {heavy}", extract: buffers }
+leaf_pages_rebuilt:
+  label: листьев после REINDEX (leaf_pages_rebuilt)
+  tolerance: 0.05
+  sql: |
+    BEGIN;
+    REINDEX INDEX sessions_churned_user_idx;
+    SELECT leaf_pages FROM pgstatindex('sessions_churned_user_idx');
+    ROLLBACK;
+depth_grew:
+  label: выросла ли глубина (depth_grew)
+  value: ["no", "нет"]

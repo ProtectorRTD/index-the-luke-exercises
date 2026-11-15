@@ -1,0 +1,16 @@
+# Задание 2.7. Впишите ответы после двоеточия, числа цифрами.
+table_pages:
+index_pages:
+
+# Запрос A
+a_rows:
+a_buffers:
+
+# Запрос B
+b_rows:
+b_buffers:
+
+# Запрос C
+c_rows:
+c_node:
+c_buffers:

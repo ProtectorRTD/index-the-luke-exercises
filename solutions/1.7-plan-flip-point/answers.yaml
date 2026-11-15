@@ -1,0 +1,50 @@
+# Эталон ищется делением пополам на живой базе.
+flip_days:
+  label: наименьшее N с Seq Scan (flip_days)
+  tolerance: 0.03
+  sql: |
+    CREATE FUNCTION pg_temp.flip() RETURNS int LANGUAGE plpgsql AS $$
+    DECLARE lo int := 1; hi int := 2192; mid int; j json;
+    BEGIN
+      WHILE hi - lo > 1 LOOP
+        mid := (lo + hi) / 2;
+        EXECUTE format('EXPLAIN (FORMAT JSON) SELECT * FROM customers WHERE created_at >= ''2020-01-01'' AND created_at < timestamptz ''2020-01-01'' + interval ''%s days''', mid) INTO j;
+        IF j->0->'Plan'->>'Node Type' = 'Seq Scan' THEN hi := mid; ELSE lo := mid; END IF;
+      END LOOP;
+      RETURN hi;
+    END $$;
+    SELECT pg_temp.flip();
+flip_percent:
+  label: доля строк при этом N, % (flip_percent)
+  tolerance: 0.05
+  sql: |
+    CREATE FUNCTION pg_temp.flip() RETURNS int LANGUAGE plpgsql AS $$
+    DECLARE lo int := 1; hi int := 2192; mid int; j json;
+    BEGIN
+      WHILE hi - lo > 1 LOOP
+        mid := (lo + hi) / 2;
+        EXECUTE format('EXPLAIN (FORMAT JSON) SELECT * FROM customers WHERE created_at >= ''2020-01-01'' AND created_at < timestamptz ''2020-01-01'' + interval ''%s days''', mid) INTO j;
+        IF j->0->'Plan'->>'Node Type' = 'Seq Scan' THEN hi := mid; ELSE lo := mid; END IF;
+      END LOOP;
+      RETURN hi;
+    END $$;
+    WITH f AS MATERIALIZED (SELECT pg_temp.flip() AS days)
+    SELECT round(100.0 * (SELECT count(*) FROM customers
+                          WHERE created_at < timestamptz '2020-01-01' + make_interval(days => (SELECT days FROM f)))
+                 / (SELECT count(*) FROM customers), 1);
+flip_days_ssd:
+  label: наименьшее N с Seq Scan при random_page_cost = 1.1 (flip_days_ssd)
+  tolerance: 0.03
+  sql: |
+    SET random_page_cost = 1.1;
+    CREATE FUNCTION pg_temp.flip() RETURNS int LANGUAGE plpgsql AS $$
+    DECLARE lo int := 1; hi int := 2192; mid int; j json;
+    BEGIN
+      WHILE hi - lo > 1 LOOP
+        mid := (lo + hi) / 2;
+        EXECUTE format('EXPLAIN (FORMAT JSON) SELECT * FROM customers WHERE created_at >= ''2020-01-01'' AND created_at < timestamptz ''2020-01-01'' + interval ''%s days''', mid) INTO j;
+        IF j->0->'Plan'->>'Node Type' = 'Seq Scan' THEN hi := mid; ELSE lo := mid; END IF;
+      END LOOP;
+      RETURN hi;
+    END $$;
+    SELECT pg_temp.flip();

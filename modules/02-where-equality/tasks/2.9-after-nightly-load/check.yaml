@@ -1,0 +1,13 @@
+id: "2.9"
+title: После ночной загрузки
+type: index
+level: investigate
+limits:
+  max_indexes: 0
+post_checks:
+  - sql: "to_regclass('public.refunds_status_idx') IS NOT NULL AND to_regclass('public.refunds_customer_id_idx') IS NOT NULL"
+    message: оба существующих индекса на месте
+rules:
+  - results_equal: true
+  - max_buffers: { s: 150, m: 150 }
+  - max_row_misestimate: 5

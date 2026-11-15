@@ -22,9 +22,16 @@ order_items (id, order_id, product_id, quantity, unit_price)
 products (id, sku, name, category_id, price) ── N:1 ── categories (id, name)
 
 events (id, user_id, type, created_at, payload)   журнал действий на сайте
+
+tickets (id, customer_id, assignee_id, status, priority, channel,
+         category_id, subject, created_at, closed_at)        обращения в поддержку
+    │ 1
+    │
+    │ N
+ticket_tags (tag_id, ticket_id) ── N:1 ── tags (id, name)    теги обращений
 ```
 
-Индексов в исходной базе нет, кроме первичных ключей. В данных есть перекосы: 60% клиентов из `SK`, 90% заказов в статусе `delivered`, первый 1% клиентов делает половину заказов. Посмотреть таблицу в psql: `\d orders`.
+Индексов в исходной базе нет, кроме первичных ключей. В данных есть перекосы: 60% клиентов из `SK`, 90% заказов в статусе `delivered`, первый 1% клиентов делает половину заказов. В поддержке открыто 2% обращений, у 3% нет исполнителя (`assignee_id IS NULL`), а самый загруженный сотрудник ведёт 15% всех обращений. Посмотреть таблицу в psql: `\d orders`.
 
 ## 2. В каком порядке выполняется SELECT
 

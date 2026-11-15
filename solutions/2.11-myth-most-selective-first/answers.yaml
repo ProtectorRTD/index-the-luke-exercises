@@ -1,0 +1,38 @@
+cs_pages:
+  label: страниц в индексе (customer_id, status) (cs_pages)
+  sql: SELECT pg_relation_size('orders_cs_idx') / 8192
+sc_pages:
+  label: страниц в индексе (status, customer_id) (sc_pages)
+  sql: SELECT pg_relation_size('orders_sc_idx') / 8192
+both_via_cs:
+  label: both через (customer_id, status) (both_via_cs)
+  abs: 1
+  plan:
+    pre: DROP INDEX orders_sc_idx
+    query: "SELECT count(*) FROM orders WHERE status = 'cancelled' AND customer_id = 17"
+    extract: buffers
+both_via_sc:
+  label: both через (status, customer_id) (both_via_sc)
+  abs: 1
+  plan:
+    pre: DROP INDEX orders_cs_idx
+    query: "SELECT count(*) FROM orders WHERE status = 'cancelled' AND customer_id = 17"
+    extract: buffers
+queue_via_cs:
+  label: queue через (customer_id, status) (queue_via_cs)
+  tolerance: 0.05
+  plan:
+    pre: DROP INDEX orders_sc_idx
+    query: "SELECT count(*) FROM orders WHERE status = 'pending'"
+    extract: buffers
+queue_via_sc:
+  label: queue через (status, customer_id) (queue_via_sc)
+  tolerance: 0.05
+  abs: 1
+  plan:
+    pre: DROP INDEX orders_cs_idx
+    query: "SELECT count(*) FROM orders WHERE status = 'pending'"
+    extract: buffers
+leading_column:
+  label: первая колонка для этой нагрузки (leading_column)
+  value: status

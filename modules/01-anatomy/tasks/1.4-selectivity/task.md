@@ -30,10 +30,9 @@ SELECT count(*), min(email) FROM customers WHERE ___;
 
 Порядок работы:
 
-1. В `prediction.md` прикиньте, какая доля строк нужна для каждого плана.
-2. `lab reset`, затем в `lab psql` выполните `\i modules/01-anatomy/tasks/1.4-selectivity/setup.sql`.
-3. Подбирайте условия, проверяя `EXPLAIN`. Сколько строк попадает под условие, считайте через `count(*)`.
-4. `lab check 1.4`.
+1. `lab reset`, затем в `lab psql` выполните `\i modules/01-anatomy/tasks/1.4-selectivity/setup.sql`.
+2. Подбирайте условия, проверяя `EXPLAIN`. Сколько строк попадает под условие, считайте через `count(*)`.
+3. `lab check 1.4`.
 
 ## Как проверяется
 
@@ -42,4 +41,4 @@ SELECT count(*), min(email) FROM customers WHERE ___;
 - в плане `b.sql` есть `Bitmap Heap Scan` по `customers` и `Bitmap Index Scan` через `customers_created_at_idx`;
 - в плане `c.sql` есть `Seq Scan` по `customers`.
 
-После PASS запишите в `prediction.md` настоящие доли строк, при которых менялся план. Совпало с прогнозом?
+После PASS ответьте себе: при какой доле строк менялся план? Точный порог вы найдёте в задании 1.7.

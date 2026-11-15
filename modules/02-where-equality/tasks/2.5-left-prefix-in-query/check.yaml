@@ -1,0 +1,7 @@
+id: "2.5"
+title: Левый префикс со стороны запроса
+type: query
+rules:
+  - results_equal: true
+  - index_cond_contains: { relation: customers, columns: [country, last_name, first_name] }
+  - max_buffers: { s: 220, m: 1000 }

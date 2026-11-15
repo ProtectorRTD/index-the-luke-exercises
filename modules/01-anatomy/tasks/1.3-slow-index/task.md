@@ -24,10 +24,9 @@ SELECT sum(total) FROM orders WHERE customer_id <= 1000;
 
 ## Что сделать
 
-1. Заполните `prediction.md`.
-2. `lab reset`, затем в `lab psql` выполните `\i modules/01-anatomy/tasks/1.3-slow-index/setup.sql`.
-3. Снимите `EXPLAIN (ANALYZE, BUFFERS)` для обоих запросов.
-4. Для запроса по оптовикам «запретите» планировщику полное чтение таблицы и bitmap и снимите план ещё раз:
+1. `lab reset`, затем в `lab psql` выполните `\i modules/01-anatomy/tasks/1.3-slow-index/setup.sql`.
+2. Снимите `EXPLAIN (ANALYZE, BUFFERS)` для обоих запросов.
+3. Для запроса по оптовикам «запретите» планировщику полное чтение таблицы и bitmap и снимите план ещё раз:
 
    ```sql
    SET enable_seqscan = off;
@@ -36,7 +35,7 @@ SELECT sum(total) FROM orders WHERE customer_id <= 1000;
    RESET ALL;
    ```
 
-5. Заполните `answers.yaml`. Названия узлов пишите как в плане, например `Seq Scan`. Для `buffers` берите сумму `shared hit + read` верхнего узла, допускается погрешность 2%.
-6. `lab check 1.3`.
+4. Заполните `answers.yaml`. Названия узлов пишите как в плане, например `Seq Scan`. Для `buffers` берите сумму `shared hit + read` верхнего узла из второго прогона подряд: первое обращение к индексу в сессии читает на несколько страниц больше. Допускается погрешность 2%.
+5. `lab check 1.3`.
 
 После PASS ответьте себе: во сколько раз «индексный» план для оптовиков прочитал больше страниц, чем `Seq Scan`, и почему почти каждая строка стоила отдельной страницы?

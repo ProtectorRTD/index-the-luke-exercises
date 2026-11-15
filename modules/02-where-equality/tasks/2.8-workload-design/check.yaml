@@ -1,0 +1,14 @@
+id: "2.8"
+title: Индексы под набор запросов
+type: index
+level: design
+limits:
+  max_indexes: 2
+parts:
+  - { file: t1.sql, rules: [ { max_rows_removed_by_filter: 20 } ] }
+  - { file: t2.sql, rules: [ { max_rows_removed_by_filter: 20 } ] }
+  - { file: t3.sql, rules: [ { max_rows_removed_by_filter: 20 } ] }
+  - { file: t4.sql, rules: [ { max_rows_removed_by_filter: 20 } ] }
+  - { file: t5.sql, rules: [ { max_rows_removed_by_filter: 20 } ] }
+total:
+  max_total_buffers: { s: 1000, m: 8000 }

@@ -1,0 +1,12 @@
+# Ответы человека, который верит мифу: глубина выросла, листьев стало меньше
+level_fresh: 2
+level_churned: 3
+leaf_pages_fresh: 577
+leaf_pages_churned: 60
+density_churned: 90
+range_rows_fresh: 200000
+range_rows_churned: 20000
+range_buffers_fresh: 290
+range_buffers_churned: 30
+leaf_pages_rebuilt: 60
+depth_grew: yes

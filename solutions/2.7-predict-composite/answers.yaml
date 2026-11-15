@@ -1,0 +1,30 @@
+table_pages:
+  label: страниц в таблице (table_pages)
+  sql: SELECT pg_relation_size('orders') / 8192
+index_pages:
+  label: страниц в индексе (index_pages)
+  sql: SELECT pg_relation_size('orders_customer_id_status_idx') / 8192
+a_rows:
+  label: строк в запросе A (a_rows)
+  sql: SELECT count(*) FROM orders WHERE customer_id = 17 AND status = 'cancelled'
+a_buffers:
+  label: страниц в запросе A (a_buffers)
+  tolerance: 0.15
+  plan: { query: "SELECT id, total FROM orders WHERE customer_id = 17 AND status = 'cancelled'", extract: buffers }
+b_rows:
+  label: строк в запросе B (b_rows)
+  sql: SELECT count(*) FROM orders WHERE customer_id = 17
+b_buffers:
+  label: страниц в запросе B (b_buffers)
+  tolerance: 0.10
+  plan: { query: "SELECT id, total FROM orders WHERE customer_id = 17", extract: buffers }
+c_rows:
+  label: строк в запросе C (c_rows)
+  sql: SELECT count(*) FROM orders WHERE status = 'pending'
+c_node:
+  label: узел по orders в запросе C (c_node)
+  plan: { query: "SELECT id, total FROM orders WHERE status = 'pending'", extract: "scan_node:orders" }
+c_buffers:
+  label: страниц в запросе C (c_buffers)
+  tolerance: 0.05
+  plan: { query: "SELECT id, total FROM orders WHERE status = 'pending'", extract: buffers }
