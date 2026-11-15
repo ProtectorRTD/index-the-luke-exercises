@@ -1,5 +1,4 @@
--- Задание 0.1. Замените ___ на нужные выражения.
 SELECT count(*) AS pending_orders
 FROM orders o
-JOIN customers c ON ___ = ___
-WHERE ___ AND ___;
+JOIN customers c ON o.customer_id = c.id
+WHERE o.status = 'pending' and c.country = 'CZ'
