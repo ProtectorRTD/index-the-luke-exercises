@@ -297,7 +297,7 @@ docker compose down -v --rmi local
 | --- | --- | --- |
 | [0. Разминка: SQL и EXPLAIN](modules/00-warmup/README.md) | нет в книге | готов |
 | [1. Анатомия индекса](modules/01-anatomy/README.md) | [Anatomy of an Index](https://use-the-index-luke.com/sql/anatomy) | готов |
-| 2. Where: равенство | [The Equals Operator](https://use-the-index-luke.com/sql/where-clause/the-equals-operator) | в работе |
+| [2. Where: равенство](modules/02-where-equality/README.md) | [The Equals Operator](https://use-the-index-luke.com/sql/where-clause/the-equals-operator) | готов |
 | 3. Where: функции и замаскированные условия | [Functions](https://use-the-index-luke.com/sql/where-clause/functions), [Bind Variables](https://use-the-index-luke.com/sql/where-clause/bind-parameters), [Obfuscated Conditions](https://use-the-index-luke.com/sql/where-clause/obfuscation) | в работе |
 | 4. Where: диапазоны, LIKE, частичные индексы, NULL | [Searching for Ranges](https://use-the-index-luke.com/sql/where-clause/searching-for-ranges), [Partial Indexes](https://use-the-index-luke.com/sql/where-clause/partial-and-filtered-indexes), [NULL](https://use-the-index-luke.com/sql/where-clause/null) | в работе |
 | 5. Производительность и масштабируемость | [Testing and Scalability](https://use-the-index-luke.com/sql/testing-scalability) | в работе |

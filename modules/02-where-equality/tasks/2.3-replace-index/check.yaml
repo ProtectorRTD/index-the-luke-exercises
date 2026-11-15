@@ -1,0 +1,15 @@
+id: "2.3"
+title: Заменить унаследованный индекс
+type: index
+limits:
+  max_indexes: 1
+  max_table_indexes: { events: 1 }
+parts:
+  - file: a.sql
+    rules:
+      - index_cond_contains: { relation: events, columns: [type, user_id] }
+      - max_rows_removed_by_filter: 0
+  - file: b.sql
+    rules:
+      - index_cond_contains: { relation: events, columns: [user_id] }
+      - max_buffers: { s: 40, m: 40 }
