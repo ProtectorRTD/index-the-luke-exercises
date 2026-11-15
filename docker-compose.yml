@@ -38,7 +38,7 @@ services:
       - -c
       - timezone=UTC
     ports:
-      - "5432:5432"
+      - "${LAB_PG_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     shm_size: 512mb

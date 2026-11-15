@@ -589,6 +589,11 @@ def apply_index_solution(task, path, res, limits):
     if "max_indexes" in limits:
         res.add(len(new) <= limits["max_indexes"],
                 f"новых индексов не больше {limits['max_indexes']} (создано {len(new)})")
+    for table, limit in (limits.get("max_table_indexes") or {}).items():
+        count = int(scalar(f"""
+            SELECT count(*) FROM pg_index i
+            WHERE i.indrelid = 'public.{table}'::regclass AND NOT i.indisprimary"""))
+        res.add(count <= limit, f"на {table} не больше {limit} индекс(ов) кроме первичного ключа (сейчас {count})")
     if "max_index_size_mb" in limits:
         size = sum(v[1] for v in new.values()) / 1024 / 1024
         res.add(size <= limits["max_index_size_mb"],
@@ -745,12 +750,16 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
         baseline = read_query_file(baseline_path) if baseline_path.exists() and show_baseline else None
 
         if ttype == "index":
-            query = read_query_file(task["dir"] / "query.sql")
-            before_plan = explain(query, runs=1) if show_baseline else None
+            parts = task.get("parts") or [dict(task, file="query.sql", label="")]
+            queries = [read_query_file(task["dir"] / p["file"]) for p in parts]
+            befores = [explain(q, runs=1) if show_baseline else None for q in queries]
             apply_index_solution(task, files.get("solution.sql", task["dir"] / "solution.sql"), res, limits)
-            evaluate_query(task, task, query, res, scale, reference=query)
-            if res.plans:
-                res.plans[-1] = ("", before_plan, res.plans[-1][2])
+            for part, query, before in zip(parts, queries, befores):
+                label = part.get("label", part["file"]) if task.get("parts") else ""
+                n_plans = len(res.plans)
+                evaluate_query(task, part, query, res, scale, label=label, reference=query)
+                if len(res.plans) > n_plans:
+                    res.plans[-1] = (label, before, res.plans[-1][2])
         elif ttype == "mixed":
             apply_index_solution(task, files.get("indexes.sql", task["dir"] / "indexes.sql"), res, limits)
             sol = files.get("solution.sql", task["dir"] / "solution.sql")
@@ -967,6 +976,12 @@ def selftest_task(task, args, scale):
         wrong_dir = sdir / "wrong"
         if wrong_dir.exists():
             for w in sorted(wrong_dir.iterdir()):
+                tag_file = w / "scales" if w.is_dir() else w
+                head = tag_file.read_text(encoding="utf-8").splitlines()[:1] if tag_file.is_file() else []
+                m = re.match(r"--\s*scales:\s*(.+)", head[0]) if head else None
+                if m and scale not in m.group(1).replace(",", " ").split():
+                    checks.append((f"неверное решение {w.name}: пропущено на масштабе {scale}", True, None))
+                    continue
                 if w.is_dir():
                     wfiles = {p.name: p for p in w.glob("*.sql")}
                     wfiles = {**files, **wfiles}
