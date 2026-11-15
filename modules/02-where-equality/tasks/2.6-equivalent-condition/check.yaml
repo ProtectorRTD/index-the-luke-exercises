@@ -1,0 +1,8 @@
+id: "2.6"
+title: Эквивалентное условие
+type: query
+rules:
+  - results_equal: true
+  - index_cond_contains: { relation: orders, columns: [customer_id, status] }
+  - max_rows_removed_by_filter: 0
+  - max_buffers: { s: 60, m: 60 }

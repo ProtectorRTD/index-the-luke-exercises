@@ -1,0 +1,15 @@
+id: "2.2"
+title: Один индекс на два запроса
+type: index
+limits:
+  max_indexes: 1
+parts:
+  - file: q1.sql
+    rules:
+      - index_cond_contains: { relation: orders, columns: [customer_id] }
+      - max_buffers: { s: 700, m: 700 }
+  - file: q2.sql
+    rules:
+      - index_cond_contains: { relation: orders, columns: [customer_id, status] }
+      - max_rows_removed_by_filter: 0
+      - max_buffers: { s: 30, m: 30 }
