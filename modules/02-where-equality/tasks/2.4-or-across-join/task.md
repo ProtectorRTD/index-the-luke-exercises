@@ -25,10 +25,9 @@ CREATE INDEX orders_customer_id_idx ON orders (customer_id);
 
 ## Что сделать
 
-1. Заполните `prediction.md`.
-2. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.4-or-across-join/setup.sql` и посмотрите план. Где стоит условие с `OR`?
-3. Перепишите запрос в `solution.sql`. Результат должен остаться тем же, **без дублей**: если заказ 830947 принадлежит тому же клиенту, он должен попасть в результат один раз.
-4. `lab check 2.4`.
+1. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.4-or-across-join/setup.sql` и посмотрите план. Где стоит условие с `OR`?
+2. Перепишите запрос в `solution.sql`. Результат должен остаться тем же, **без дублей**: если заказ 830947 принадлежит тому же клиенту, он должен попасть в результат один раз.
+3. `lab check 2.4`.
 
 ## Как проверяется
 

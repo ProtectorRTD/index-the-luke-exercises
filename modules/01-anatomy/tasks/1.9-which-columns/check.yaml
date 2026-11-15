@@ -1,0 +1,14 @@
+id: "1.9"
+title: Какие колонки индексировать
+type: index
+level: design
+limits:
+  max_indexes: 2
+parts:
+  - { file: a.sql }
+  - { file: b.sql }
+  - { file: c.sql }
+  - { file: d.sql }
+  - { file: e.sql }
+total:
+  max_total_buffers: { s: 22000, m: 230000 }

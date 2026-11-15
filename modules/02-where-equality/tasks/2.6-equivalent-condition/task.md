@@ -22,15 +22,14 @@ WHERE customer_id = 17 AND shipped_at IS NULL;
 
 ## Что сделать
 
-1. Заполните `prediction.md`.
-2. Убедитесь в правиле на данных:
+1. Убедитесь в правиле на данных:
    ```sql
    SELECT status, count(*) FILTER (WHERE shipped_at IS NULL) AS not_shipped, count(*)
    FROM orders GROUP BY status;
    ```
-3. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.6-equivalent-condition/setup.sql` и посмотрите исходный план. Что в `Index Cond`, а что в `Filter`?
-4. Перепишите запрос в `solution.sql` так, чтобы результат остался тем же, а фильтром не отбрасывалось ни одной строки.
-5. `lab check 2.6`.
+2. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.6-equivalent-condition/setup.sql` и посмотрите исходный план. Что в `Index Cond`, а что в `Filter`?
+3. Перепишите запрос в `solution.sql` так, чтобы результат остался тем же, а фильтром не отбрасывалось ни одной строки.
+4. `lab check 2.6`.
 
 ## Как проверяется
 

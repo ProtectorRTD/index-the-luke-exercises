@@ -1,0 +1,13 @@
+# Задание 1.8. Впишите ответы после двоеточия, числа цифрами.
+
+# Исходные числа
+rows_per_heap_page:
+entries_per_leaf:
+
+# Факт из второго прогона EXPLAIN (ANALYZE, BUFFERS)
+pk_buffers:
+week_rows:
+week_buffers:
+quarter_buffers:
+scattered_rows:
+scattered_buffers:

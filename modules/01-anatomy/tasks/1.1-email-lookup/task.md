@@ -16,10 +16,9 @@ WHERE email = 'Peter.Oravec0004242@example.cz';
 
 ## Что сделать
 
-1. Заполните `prediction.md`.
-2. Посмотрите исходный план: `lab psql`, затем `EXPLAIN (ANALYZE, BUFFERS)` для запроса из `query.sql`. Найдите в плане `Rows Removed by Filter` и `Buffers`.
-3. В `solution.sql` создайте индекс, после которого поиск станет точечным.
-4. Запустите `lab check 1.1`.
+1. Посмотрите исходный план: `lab psql`, затем `EXPLAIN (ANALYZE, BUFFERS)` для запроса из `query.sql`. Найдите в плане `Rows Removed by Filter` и `Buffers`.
+2. В `solution.sql` создайте индекс, после которого поиск станет точечным.
+3. Запустите `lab check 1.1`.
 
 ## Как проверяется
 

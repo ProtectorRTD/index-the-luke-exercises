@@ -1,0 +1,36 @@
+relpages:
+  label: страниц в таблице (relpages)
+  sql: SELECT relpages FROM pg_class WHERE oid = 'public.customers'::regclass
+reltuples:
+  label: строк в таблице (reltuples)
+  sql: SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.customers'::regclass
+seq_page_cost:
+  label: seq_page_cost
+  sql: SHOW seq_page_cost
+cpu_tuple_cost:
+  label: cpu_tuple_cost
+  sql: SHOW cpu_tuple_cost
+cpu_operator_cost:
+  label: cpu_operator_cost
+  sql: SHOW cpu_operator_cost
+seq_scan_cost:
+  label: стоимость Seq Scan (seq_scan_cost)
+  tolerance: 0.005
+  plan: { query: "SELECT * FROM customers WHERE country = 'SK'", extract: total_cost }
+freq_sk:
+  label: доля SK по статистике (freq_sk)
+  tolerance: 0.01
+  sql: >
+    SELECT most_common_freqs[array_position(most_common_vals::text::text[], 'SK')]
+    FROM pg_stats WHERE schemaname = 'public' AND tablename = 'customers' AND attname = 'country'
+estimated_rows:
+  label: ожидаемое число строк (estimated_rows)
+  tolerance: 0.01
+  plan: { query: "SELECT * FROM customers WHERE country = 'SK'", extract: plan_rows }
+actual_rows:
+  label: фактическое число строк (actual_rows)
+  sql: SELECT count(*) FROM customers WHERE country = 'SK'
+seq_scan_cost_ua:
+  label: стоимость Seq Scan для UA (seq_scan_cost_ua)
+  tolerance: 0.005
+  plan: { query: "SELECT * FROM customers WHERE country = 'UA'", extract: total_cost }

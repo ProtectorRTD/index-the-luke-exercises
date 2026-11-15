@@ -1,0 +1,11 @@
+id: "1.10"
+title: Индекс добавили, а быстрее не стало
+type: index
+level: investigate
+limits:
+  max_indexes: 1
+  max_table_indexes: { orders: 1 }
+rules:
+  - results_equal: true
+  - must_not_have_node: { node: Seq Scan, relation: orders }
+  - max_buffers: { s: 20, m: 20 }

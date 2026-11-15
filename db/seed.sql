@@ -191,6 +191,88 @@ FROM (SELECT g, random() AS r_type, random() AS r_page
       FROM generate_series(1, :n_events) g) s;
 
 -- ---------------------------------------------------------------------------
+-- tickets: обращения в поддержку. Много колонок с малым числом значений,
+-- редкий статус open, 3% обращений без исполнителя (assignee_id IS NULL).
+-- Строки лежат на диске в порядке created_at.
+-- ---------------------------------------------------------------------------
+SELECT setseed(0.66);
+CREATE TEMP TABLE tickets_raw AS
+SELECT
+    g AS rn,
+    CASE WHEN r_heavy < 0.5
+         THEN 1 + floor(r_cust * (:n_customers / 100))::bigint
+         ELSE 1 + floor(r_cust * :n_customers)::bigint
+    END AS customer_id,
+    CASE WHEN r_unassigned < 0.03 THEN NULL
+         ELSE 1 + floor(pow(r_assignee, 2) * 40)::int
+    END AS assignee_id,
+    CASE
+        WHEN r_status < 0.80 THEN 'closed'
+        WHEN r_status < 0.94 THEN 'solved'
+        WHEN r_status < 0.98 THEN 'pending'
+        ELSE 'open'
+    END AS status,
+    CASE
+        WHEN r_priority < 0.30 THEN 'low'
+        WHEN r_priority < 0.85 THEN 'normal'
+        WHEN r_priority < 0.97 THEN 'high'
+        ELSE 'urgent'
+    END AS priority,
+    CASE
+        WHEN r_channel < 0.50 THEN 'email'
+        WHEN r_channel < 0.80 THEN 'web'
+        WHEN r_channel < 0.95 THEN 'chat'
+        ELSE 'phone'
+    END AS channel,
+    1 + floor(r_category * 30)::int AS category_id,
+    (ARRAY['Refund request','Delivery delay','Wrong item','Payment failed','Account access',
+           'Invoice question','Damaged package','Change address','Cancel order','Product question'])
+        [1 + floor(r_subject * 10)::int] || ' #' || g AS subject,
+    date_trunc('second', timestamptz '2021-01-01 00:00:00+00'
+        + make_interval(secs => 157766400 * sqrt(r_created))) AS created_at,
+    r_closed
+FROM (
+    SELECT g, random() AS r_heavy, random() AS r_cust, random() AS r_unassigned, random() AS r_assignee,
+           random() AS r_status, random() AS r_priority, random() AS r_channel, random() AS r_category,
+           random() AS r_subject, random() AS r_created, random() AS r_closed
+    FROM generate_series(1, :n_tickets) g
+) s;
+
+CREATE TABLE tickets AS
+SELECT row_number() OVER (ORDER BY created_at, rn)::bigint AS id,
+       customer_id, assignee_id, status, priority, channel, category_id, subject, created_at,
+       CASE WHEN status IN ('solved', 'closed')
+            THEN date_trunc('second', created_at + make_interval(secs => 3600 + 2592000 * r_closed))
+       END AS closed_at
+FROM tickets_raw
+ORDER BY 1;
+DROP TABLE tickets_raw;
+
+-- ---------------------------------------------------------------------------
+-- tags и ticket_tags: связь «многие ко многим». У таблицы связей только первичный ключ.
+-- ---------------------------------------------------------------------------
+CREATE TABLE tags (
+    id   int  PRIMARY KEY,
+    name text NOT NULL
+);
+INSERT INTO tags (id, name)
+SELECT i, n
+FROM unnest(ARRAY[
+    'vip','refund','delivery','payment','bug','feature','complaint','praise','fraud','legal',
+    'b2b','first-contact','escalated','waiting-customer','waiting-vendor','duplicate','spam',
+    'follow-up','survey','other']) WITH ORDINALITY AS t(n, i);
+
+SELECT setseed(0.77);
+CREATE TABLE ticket_tags AS
+SELECT DISTINCT tag_id, ticket_id
+FROM (
+    SELECT 1 + floor(pow(random(), 2) * 20)::int AS tag_id, t.id AS ticket_id
+    FROM (SELECT id FROM tickets ORDER BY id) t,
+         generate_series(1, 1 + (t.id % 3)::int) n
+) s
+ORDER BY ticket_id, tag_id;
+
+-- ---------------------------------------------------------------------------
 -- Ограничения: только первичные ключи и NOT NULL. Индексов на внешних ключах нет.
 -- ---------------------------------------------------------------------------
 ALTER TABLE customers   ALTER COLUMN email SET NOT NULL,
@@ -215,6 +297,17 @@ ALTER TABLE events      ALTER COLUMN user_id SET NOT NULL,
                         ALTER COLUMN type SET NOT NULL,
                         ALTER COLUMN created_at SET NOT NULL,
                         ADD PRIMARY KEY (id);
+ALTER TABLE tickets     ALTER COLUMN customer_id SET NOT NULL,
+                        ALTER COLUMN status SET NOT NULL,
+                        ALTER COLUMN priority SET NOT NULL,
+                        ALTER COLUMN channel SET NOT NULL,
+                        ALTER COLUMN category_id SET NOT NULL,
+                        ALTER COLUMN subject SET NOT NULL,
+                        ALTER COLUMN created_at SET NOT NULL,
+                        ADD PRIMARY KEY (id);
+ALTER TABLE ticket_tags ALTER COLUMN tag_id SET NOT NULL,
+                        ALTER COLUMN ticket_id SET NOT NULL,
+                        ADD PRIMARY KEY (tag_id, ticket_id);
 
 VACUUM (ANALYZE, FREEZE);
 CHECKPOINT;

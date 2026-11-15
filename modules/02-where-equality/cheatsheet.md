@@ -84,3 +84,36 @@ SELECT * FROM orders WHERE customer_id = 17 AND status = 'cancelled';
 -- возможен BitmapAnd: два Bitmap Index Scan и их пересечение
 DROP INDEX tmp_customer, tmp_status;
 ```
+
+## Посмотреть план с конкретным индексом
+
+```sql
+BEGIN;
+DROP INDEX orders_sc_idx;                 -- спрятать другой индекс
+EXPLAIN (ANALYZE, BUFFERS) SELECT ...;
+ROLLBACK;                                 -- индекс возвращается
+```
+
+Удаление индекса внутри транзакции мгновенное и откатывается целиком. На рабочей базе так делать нельзя: таблица заблокирована до конца транзакции.
+
+## Статистика
+
+```sql
+ANALYZE refunds;                          -- пересобрать статистику по таблице
+
+-- когда её собирали и сколько строк изменилось с тех пор
+SELECT last_analyze, last_autoanalyze, n_mod_since_analyze
+FROM pg_stat_user_tables WHERE relname = 'refunds';
+
+-- что планировщик знает о значениях колонки
+SELECT most_common_vals, most_common_freqs FROM pg_stats
+WHERE tablename = 'refunds' AND attname = 'status';
+```
+
+## Описание таблицы и её ключей
+
+```
+\d ticket_tags
+```
+
+В разделе `Indexes` видно, из каких колонок и в каком порядке состоит первичный ключ.

@@ -1,0 +1,8 @@
+# Ответы по мифу: (customer_id, status) лучше для обоих запросов
+cs_pages: 1577
+sc_pages: 1577
+both_via_cs: 4
+both_via_sc: 40
+queue_via_cs: 8
+queue_via_sc: 8
+leading_column: customer_id

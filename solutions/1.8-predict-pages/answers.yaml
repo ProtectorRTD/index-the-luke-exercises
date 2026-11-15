@@ -1,0 +1,31 @@
+rows_per_heap_page:
+  label: строк orders на странице таблицы (rows_per_heap_page)
+  tolerance: 0.03
+  sql: SELECT round(reltuples / relpages) FROM pg_class WHERE oid = 'public.orders'::regclass
+entries_per_leaf:
+  label: записей на листе индекса (entries_per_leaf)
+  tolerance: 0.05
+  sql: >
+    SELECT round(avg(s.live_items)) FROM generate_series(1, (pg_relation_size('orders_created_at_idx') / 8192)::int - 1) b,
+    bt_page_stats('orders_created_at_idx', b) s WHERE s.type = 'l'
+pk_buffers:
+  label: страниц при поиске по первичному ключу (pk_buffers)
+  plan: { query: "SELECT * FROM orders WHERE id = 424242", extract: buffers }
+week_rows:
+  label: строк за неделю (week_rows)
+  sql: SELECT count(*) FROM orders WHERE created_at >= '2024-03-04' AND created_at < '2024-03-11'
+week_buffers:
+  label: страниц за неделю (week_buffers)
+  tolerance: 0.10
+  plan: { query: "SELECT * FROM orders WHERE created_at >= '2024-03-04' AND created_at < '2024-03-11'", extract: buffers }
+quarter_buffers:
+  label: страниц за квартал (quarter_buffers)
+  tolerance: 0.10
+  plan: { query: "SELECT * FROM orders WHERE created_at >= '2024-04-01' AND created_at < '2024-07-01'", extract: buffers }
+scattered_rows:
+  label: клиентов за месяц (scattered_rows)
+  sql: SELECT count(*) FROM customers WHERE created_at >= '2024-01-01' AND created_at < '2024-02-01'
+scattered_buffers:
+  label: страниц для клиентов за месяц (scattered_buffers)
+  tolerance: 0.10
+  plan: { query: "SELECT * FROM customers WHERE created_at >= '2024-01-01' AND created_at < '2024-02-01'", extract: buffers }

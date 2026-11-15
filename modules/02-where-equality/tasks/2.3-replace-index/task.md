@@ -26,10 +26,9 @@ SELECT id, type, created_at FROM events WHERE user_id = 54321;
 
 ## Что сделать
 
-1. Заполните `prediction.md`.
-2. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.3-replace-index/setup.sql` и посмотрите планы обоих запросов.
-3. В `solution.sql` приведите индексы на `events` к такому виду, чтобы быстрыми были оба запроса.
-4. `lab check 2.3`.
+1. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.3-replace-index/setup.sql` и посмотрите планы обоих запросов.
+2. В `solution.sql` приведите индексы на `events` к такому виду, чтобы быстрыми были оба запроса.
+3. `lab check 2.3`.
 
 ## Как проверяется
 

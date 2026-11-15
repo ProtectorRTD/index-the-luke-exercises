@@ -22,10 +22,9 @@ WHERE last_name = 'novak' AND first_name = 'jana';
 
 ## Что сделать
 
-1. Заполните `prediction.md`.
-2. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.5-left-prefix-in-query/setup.sql` и посмотрите план. Сравните `Buffers` с размером индекса.
-3. Перепишите запрос в `solution.sql` так, чтобы условие на **первую** колонку индекса появилось в `Index Cond`, а результат остался тем же.
-4. `lab check 2.5`.
+1. `lab reset`, в `lab psql` выполните `\i modules/02-where-equality/tasks/2.5-left-prefix-in-query/setup.sql` и посмотрите план. Сравните `Buffers` с размером индекса.
+2. Перепишите запрос в `solution.sql` так, чтобы условие на **первую** колонку индекса появилось в `Index Cond`, а результат остался тем же.
+3. `lab check 2.5`.
 
 ## Как проверяется
 

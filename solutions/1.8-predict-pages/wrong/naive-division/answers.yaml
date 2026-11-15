@@ -1,0 +1,9 @@
+# Типичная ошибка: для клиентов страницы посчитаны как «строки / строк на странице»
+rows_per_heap_page: 97
+entries_per_leaf: 365
+pk_buffers: 4
+week_rows: 5000
+week_buffers: 70
+quarter_buffers: 880
+scattered_rows: 1400
+scattered_buffers: 25

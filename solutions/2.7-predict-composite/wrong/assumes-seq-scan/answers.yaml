@@ -1,0 +1,10 @@
+# Ошибка: «условие не на первую колонку, значит индекс не используется»
+table_pages: 10304
+index_pages: 1589
+a_rows: 12
+a_buffers: 15
+b_rows: 499
+b_buffers: 495
+c_rows: 5007
+c_node: Seq Scan
+c_buffers: 10304

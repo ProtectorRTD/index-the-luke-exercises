@@ -1,0 +1,11 @@
+# Типичная ошибка: забыта стоимость проверки условия (cpu_operator_cost)
+relpages: 1408
+reltuples: 100000
+seq_page_cost: 1
+cpu_tuple_cost: 0.01
+cpu_operator_cost: 0.0025
+seq_scan_cost: 2408
+freq_sk: 0.6
+estimated_rows: 60000
+actual_rows: 60000
+seq_scan_cost_ua: 2408
