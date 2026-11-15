@@ -1,0 +1,6 @@
+level: 2
+depth: 2
+root_items: 1
+leaf_pages: 1
+entries_per_leaf: 1
+lookup_buffers: 3

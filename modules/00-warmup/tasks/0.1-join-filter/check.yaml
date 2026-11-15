@@ -1,0 +1,6 @@
+id: "0.1"
+title: Заказы в ожидании из Чехии
+type: query
+ordered: false
+rules:
+  - results_equal: true

@@ -1,1 +1,332 @@
-# index-the-luke-exercises
+# Index Lab
+
+Практикум к книге Маркуса Винанда [«Use The Index, Luke»](https://use-the-index-luke.com/) на PostgreSQL. Каждая глава книги — отдельный модуль: объяснение, демо-скрипт и задания с автоматической проверкой по плану запроса.
+
+Читаете главу, запускаете демо, решаете задания. Проверка говорит PASS или FAIL и показывает план «было / стало».
+
+## Содержание
+
+1. [Что понадобится](#1-что-понадобится)
+2. [Установка по шагам](#2-установка-по-шагам)
+3. [Как проходить модуль](#3-как-проходить-модуль)
+4. [Команды](#4-команды)
+5. [Как устроены задания и проверка](#5-как-устроены-задания-и-проверка)
+6. [Если проходите вместе](#6-если-проходите-вместе)
+7. [Свой PostgreSQL вместо Docker](#7-свой-postgresql-вместо-docker)
+8. [Частые проблемы](#8-частые-проблемы)
+9. [Обновить, остановить, удалить](#9-обновить-остановить-удалить)
+10. [Карта модулей](#10-карта-модулей)
+11. [Для авторов заданий](#11-для-авторов-заданий)
+
+## 1. Что понадобится
+
+| Что | Зачем | Примечание |
+| --- | --- | --- |
+| Docker Desktop (Windows, macOS) или Docker Engine с Compose v2 (Linux) | В нём работают база и проверка | Проверить: `docker compose version` |
+| Git | Скачать практикум и хранить свои решения | |
+| Редактор | Писать `solution.sql` и ответы | Любой: VS Code, IntelliJ, Notepad++ |
+| Место на диске | Данные | Около 3 ГБ на масштабе `s`, до 10 ГБ на масштабе `m` |
+| Память | Работа базы | Docker должно быть доступно хотя бы 2 ГБ |
+
+Ставить PostgreSQL, Python или драйверы не нужно: всё это внутри контейнеров. Если Docker использовать нельзя, смотрите раздел 7.
+
+## 2. Установка по шагам
+
+### Шаг 1. Установить Docker
+
+- **Windows.** Установите [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/). При установке оставьте включённым WSL 2. После установки запустите Docker Desktop и дождитесь статуса «Engine running».
+- **macOS.** Установите [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) и запустите его.
+- **Linux.** Установите [Docker Engine](https://docs.docker.com/engine/install/) и плагин Compose. Чтобы не писать `sudo` перед каждой командой, добавьте себя в группу `docker`.
+
+Проверка в терминале:
+
+```bash
+docker compose version
+```
+
+Должна напечататься версия, например `Docker Compose version v2.x`.
+
+### Шаг 2. Скачать практикум
+
+Свои решения вы будете коммитить, поэтому удобнее сделать fork репозитория на GitHub и клонировать уже его. Можно клонировать и напрямую:
+
+```bash
+git clone https://github.com/ProtectorRTD/index-the-luke-exercises
+cd index-the-luke-exercises
+```
+
+Сразу заведите свою ветку, чтобы решения не смешивались с исходными заготовками:
+
+```bash
+git switch -c my-solutions
+```
+
+### Шаг 3. Поднять базу
+
+macOS, Linux, Git Bash:
+
+```bash
+./lab up
+```
+
+Windows, cmd или PowerShell:
+
+```powershell
+.\lab.cmd up
+```
+
+Дальше во всех примерах написано просто `lab`. На Windows подставляйте `.\lab.cmd`, на остальных системах `./lab`.
+
+Первый запуск скачивает образ PostgreSQL 16 и собирает контейнер с проверкой. Это занимает несколько минут, дальше запуск занимает секунды.
+
+### Шаг 4. Сгенерировать данные
+
+```bash
+lab seed --scale s
+```
+
+Масштаб `s`: 100 тысяч клиентов, 1 миллион заказов, 3 миллиона позиций. Генерация занимает около минуты. В конце печатаются размеры таблиц и строка «Готово».
+
+Масштаб `m` в 10 раз больше. Он понадобится только в модуле 5, генерируется несколько минут. Переключаться можно в любой момент: `lab seed --scale m`, потом обратно `lab seed --scale s`.
+
+### Шаг 5. Проверить, что всё работает
+
+```bash
+lab status        # список всех заданий, у всех статус «-»
+lab demo 0        # демо первого модуля: запросы и планы с комментариями
+lab check 0.1     # проверка задания: будет FAIL, задание ещё не решено
+```
+
+Если `lab check 0.1` напечатал отчёт со строкой `ИТОГ: FAIL`, установка закончена.
+
+## 3. Как проходить модуль
+
+1. Прочитайте главу книги. Ссылка на неё есть в начале README модуля.
+2. Прочитайте `modules/<модуль>/README.md`: идея главы своими словами, как это выглядит именно в PostgreSQL, что нового появляется в плане запроса.
+3. Запустите `lab demo <номер модуля>`. Скрипт выполняет команды по одной и печатает их вместе с комментариями. После демо база возвращается в исходное состояние.
+4. Решайте задания по порядку. Для каждого:
+    1. Прочитайте `task.md`: сценарий, цель, по каким правилам проверяется.
+    2. Заполните `prediction.md`: какой будет план и почему. Строки, начинающиеся с `>`, должны быть дописаны, иначе проверка не пройдёт. Прогноз до запуска — главная часть обучения.
+    3. Посмотрите исходный план в `lab psql`: `EXPLAIN (ANALYZE, BUFFERS) ...`.
+    4. Напишите решение в файлы задания.
+    5. Запустите `lab check <номер>`. Читайте отчёт: какие правила не выполнены и как выглядит план.
+    6. Застряли — `lab hint <номер>`. Подсказок три, каждый вызов открывает следующую.
+5. После PASS откройте `solutions/<задание>/why.md`: разбор, почему так, и «соблазнительные, но неверные» решения.
+6. Закоммитьте решения в свою ветку.
+
+SQL, который нужен в заданиях модуля, собран в `modules/<модуль>/cheatsheet.md`.
+
+## 4. Команды
+
+| Команда | Что делает |
+| --- | --- |
+| `lab up` | Поднимает базу и собирает контейнер с проверкой |
+| `lab down` | Останавливает базу. Данные сохраняются |
+| `lab seed --scale s` | Генерирует данные заново, масштаб `s` или `m` |
+| `lab psql` | Открывает psql в базе. Выход — `\q` |
+| `lab demo 1` | Выполняет демо-скрипт модуля 1 |
+| `lab check 1.3` | Проверяет задание 1.3 |
+| `lab check --module 1` | Проверяет все задания модуля 1 |
+| `lab hint 1.3` | Показывает следующую подсказку к заданию 1.3 |
+| `lab hint 1.3 2` | Показывает подсказки с первой по вторую |
+| `lab reset` | Удаляет всё, что вы создали в базе: индексы, представления, таблицы, функции |
+| `lab status` | Прогресс по всем заданиям |
+
+Файлы решений лежат в вашей папке и в контейнер попадают автоматически, ничего копировать не нужно. В `lab psql` пути тоже относительные от корня практикума, например `\i modules/01-anatomy/tasks/1.2-tree-depth/setup.sql`.
+
+### Подключение из IDE
+
+База доступна снаружи контейнера:
+
+| Параметр | Значение |
+| --- | --- |
+| Хост | `localhost` |
+| Порт | `5432` |
+| База | `lab` |
+| Пользователь | `lab` |
+| Пароль | `lab` |
+
+Подойдёт DBeaver, DataGrip, вкладка Database в IntelliJ, расширение PostgreSQL для VS Code.
+
+## 5. Как устроены задания и проверка
+
+### Структура модуля
+
+```
+modules/01-anatomy/
+  README.md        идея главы, как это выглядит в Postgres, как читать план
+  demo.sql         пошаговая демонстрация: lab demo 1
+  cheatsheet.md    SQL, который понадобится в заданиях
+  tasks/
+    1.1-email-lookup/
+      task.md        сценарий, цель, критерии проверки
+      prediction.md  ваш прогноз до первого EXPLAIN
+      query.sql      исходный запрос (если есть)
+      setup.sql      что создаётся перед проверкой (если есть)
+      solution.sql   ваше решение
+      check.yaml     правила проверки
+
+solutions/1.1-email-lookup/
+  solution.sql     эталон
+  hints.md         три подсказки
+  why.md           разбор
+  wrong/           неверные решения, на которых проверяется сама проверка
+```
+
+### Типы заданий
+
+| Тип | Что можно менять | Куда писать |
+| --- | --- | --- |
+| индексы | Только индексы: `CREATE INDEX`, `DROP INDEX`, `ANALYZE`, `VACUUM`. Запрос фиксирован | `solution.sql` |
+| запросы | Только запрос. Индексы даны, результат должен остаться тем же | `solution.sql` или несколько файлов, как сказано в `task.md` |
+| ответы | Ничего. Нужно измерить или прочитать план и записать числа | `answers.yaml` |
+| индексы и запросы | И то и другое, с модуля 4 | `indexes.sql` и `solution.sql` |
+
+### Что делает `lab check`
+
+1. Возвращает базу в исходное состояние и выполняет `setup.sql` задания.
+2. Проверяет, что в решении только разрешённые команды.
+3. Сравнивает результат вашего запроса с эталонным.
+4. Снимает план через `EXPLAIN (ANALYZE, BUFFERS)`. Запрос выполняется дважды, берётся второй прогон.
+5. Проверяет правила из `check.yaml`: какие узлы должны быть в плане и каких быть не должно, какие колонки должны попасть в `Index Cond`, сколько строк можно отбросить фильтром, сколько страниц можно прочитать.
+6. Печатает отчёт и итог: PASS, только если выполнены все правила.
+
+Время выполнения показывается в отчёте, но на итог не влияет: оно зависит от машины. Число прочитанных страниц (buffers) не зависит, поэтому пороги заданы в страницах.
+
+`SET enable_*`, хинты и другие способы заставить планировщик выбрать нужный план в решениях запрещены. Для экспериментов в `lab psql` ими пользоваться можно.
+
+### Данные
+
+Интернет-магазин: `customers`, `orders`, `order_items`, `products`, `categories`, `events`. Схема описана в README модуля 0.
+
+Данные генерируются детерминированно: на любой машине получаются одни и те же строки и одни и те же планы, поэтому пороги в проверках одинаковые для всех. Перекосы заложены специально: 60% клиентов из одной страны, 90% заказов в одном статусе, 1% клиентов делает половину заказов. Без перекосов многие эффекты из книги не видны.
+
+**Не меняйте данные в базовых таблицах** (`UPDATE`, `DELETE`, `INSERT` в `orders` и т. п.). `lab reset` убирает созданные вами объекты, но не откатывает изменения данных: он только предупредит. Исправит это `lab seed`.
+
+Настройки PostgreSQL зафиксированы в `docker-compose.yml`: параллельные запросы и JIT выключены, `random_page_cost = 4`. От них зависят планы и пороги, менять их не нужно.
+
+## 6. Если проходите вместе
+
+Практикум рассчитан и на одного человека, и на группу.
+
+- У каждого свой клон или fork и своя база: проверка сбрасывает базу перед каждым запуском, поэтому одна база на нескольких человек не подойдёт.
+- У каждого своя ветка, решения коммитятся в неё.
+- `solutions/` не открывать до PASS. Подсказки через `lab hint` открываются по одной.
+- Прогресс (`lab status`, использованные подсказки) хранится локально в папке `.lab/` и в git не попадает.
+- После модуля полезно сравнить решения и планы и обсудить, почему они разные. Данные у всех одинаковые, поэтому планы можно сравнивать один к одному.
+
+## 7. Свой PostgreSQL вместо Docker
+
+Если Docker недоступен, проверку можно запускать напрямую, против своего PostgreSQL. Так удобнее всего на Linux и macOS.
+
+Нужно:
+
+- PostgreSQL 16 с пакетом contrib: расширения `pageinspect`, `pgstattuple`, `pg_trgm`, `pg_stat_statements`;
+- клиент `psql` в `PATH`;
+- Python 3 и пакет PyYAML: `pip install pyyaml`;
+- отдельная пустая база и пользователь-суперпользователь: генератор создаёт расширения и меняет настройки базы.
+
+Настройте сервер так же, как в `docker-compose.yml`, иначе планы и пороги разойдутся с эталоном:
+
+```sql
+ALTER SYSTEM SET shared_buffers = '256MB';
+ALTER SYSTEM SET work_mem = '16MB';
+ALTER SYSTEM SET maintenance_work_mem = '256MB';
+ALTER SYSTEM SET random_page_cost = 4;
+ALTER SYSTEM SET effective_cache_size = '1GB';
+ALTER SYSTEM SET max_parallel_workers_per_gather = 0;
+ALTER SYSTEM SET max_parallel_maintenance_workers = 0;
+ALTER SYSTEM SET jit = off;
+ALTER SYSTEM SET autovacuum = off;
+ALTER SYSTEM SET track_io_timing = on;
+ALTER SYSTEM SET timezone = 'UTC';
+ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
+```
+
+После этого перезапустите PostgreSQL: `shared_buffers` и `shared_preload_libraries` применяются только при старте.
+
+Подключение задаётся стандартными переменными окружения, команды те же, только вместо `lab` пишется `python3 runner/lab.py`:
+
+```bash
+export PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=... PGDATABASE=lab
+python3 runner/lab.py seed --scale s
+python3 runner/lab.py check 0.1
+```
+
+Выключенный автовакуум влияет на весь сервер. Используйте для практикума отдельный экземпляр PostgreSQL, а не рабочий.
+
+## 8. Частые проблемы
+
+| Симптом | Что сделать |
+| --- | --- |
+| `Cannot connect to the Docker daemon` или `error during connect` | Docker Desktop не запущен. Запустите его и дождитесь «Engine running» |
+| `port is already allocated` или `address already in use` на `lab up` | Порт 5432 занят другим PostgreSQL. Задайте другой: `LAB_PG_PORT=5433 ./lab up` (в PowerShell `$env:LAB_PG_PORT=5433; .\lab.cmd up`). В IDE подключайтесь к этому порту |
+| `./lab: Permission denied` | `chmod +x lab` |
+| `/usr/bin/env: 'bash\r': No such file or directory` | Файл получил окончания строк Windows. Выполните `git config core.autocrlf false`, затем `git rm --cached -r . && git reset --hard` |
+| `База пустая. Сначала запустите: lab seed --scale s` | Данные ещё не сгенерированы или удалены вместе с томом. Запустите `lab seed --scale s` |
+| `lab check` пишет, что данные в таблицах менялись | Вы изменили базовые таблицы. Перегенерируйте: `lab seed --scale s` |
+| План у вас не такой, как в `why.md` | Проверьте масштаб в `lab status`: разборы написаны для `s`. Убедитесь, что не остались лишние индексы: `lab reset` |
+| `lab seed --scale m` падает с нехваткой места | Нужно до 10 ГБ свободного места в хранилище Docker. В Docker Desktop: Settings → Resources |
+| На Windows всё очень медленно | Клонируйте практикум в файловую систему WSL (`\\wsl$\...`) и работайте оттуда, либо выделите Docker больше памяти и процессоров |
+
+## 9. Обновить, остановить, удалить
+
+**Обновить практикум**, когда появились новые модули:
+
+```bash
+git switch main
+git pull                     # или git fetch upstream && git merge upstream/main для fork
+git switch my-solutions
+git merge main
+lab up                       # пересобрать контейнер, если поменялась проверка
+```
+
+Ваши решения лежат в файлах заданий, новые модули добавляют новые папки, поэтому конфликты бывают редко. Если конфликт всё же в `solution.sql`, оставьте свою версию.
+
+**Остановить**, чтобы база не занимала память: `lab down`. Данные сохраняются, следующий `lab up` поднимет их как были.
+
+**Удалить всё**, включая данные:
+
+```bash
+docker compose down -v --rmi local
+```
+
+## 10. Карта модулей
+
+| Модуль | Глава книги | Статус |
+| --- | --- | --- |
+| [0. Разминка: SQL и EXPLAIN](modules/00-warmup/README.md) | нет в книге | готов |
+| [1. Анатомия индекса](modules/01-anatomy/README.md) | [Anatomy of an Index](https://use-the-index-luke.com/sql/anatomy) | готов |
+| 2. Where: равенство | [The Equals Operator](https://use-the-index-luke.com/sql/where-clause/the-equals-operator) | в работе |
+| 3. Where: функции и замаскированные условия | [Functions](https://use-the-index-luke.com/sql/where-clause/functions), [Bind Variables](https://use-the-index-luke.com/sql/where-clause/bind-parameters), [Obfuscated Conditions](https://use-the-index-luke.com/sql/where-clause/obfuscation) | в работе |
+| 4. Where: диапазоны, LIKE, частичные индексы, NULL | [Searching for Ranges](https://use-the-index-luke.com/sql/where-clause/searching-for-ranges), [Partial Indexes](https://use-the-index-luke.com/sql/where-clause/partial-and-filtered-indexes), [NULL](https://use-the-index-luke.com/sql/where-clause/null) | в работе |
+| 5. Производительность и масштабируемость | [Testing and Scalability](https://use-the-index-luke.com/sql/testing-scalability) | в работе |
+| 6. Join | [The Join Operation](https://use-the-index-luke.com/sql/join) | в работе |
+| 7. Кластеризация данных | [Clustering Data](https://use-the-index-luke.com/sql/clustering) | в работе |
+| 8. Сортировка и группировка | [Sorting and Grouping](https://use-the-index-luke.com/sql/sorting-grouping) | в работе |
+| 9. Top-N и пагинация | [Partial Results](https://use-the-index-luke.com/sql/partial-results) | в работе |
+| 10. Изменение данных | [Insert, Delete and Update](https://use-the-index-luke.com/sql/dml) | в работе |
+| 11. Финальный босс | всё вместе | в работе |
+
+## 11. Для авторов заданий
+
+Задание — папка в `modules/<модуль>/tasks/` с `task.md` и `check.yaml`, плюс папка с тем же именем в `solutions/`.
+
+Минимальный `check.yaml` для задания на индекс:
+
+```yaml
+id: "1.1"
+title: Поиск клиента по email
+type: index              # index | query | answers | mixed
+limits:
+  max_indexes: 1
+rules:
+  - results_equal: true
+  - must_not_have_node: { node: Seq Scan, relation: customers }
+  - must_have_node: { node: [Index Scan, Index Only Scan], relation: customers }
+  - max_buffers: { s: 6, m: 7 }
+```
+
+Доступные правила: `results_equal`, `must_have_node`, `must_not_have_node`, `index_cond_contains`, `max_buffers`, `min_buffers`, `max_rows_removed_by_filter`, `heap_fetches_zero`, `must_match`. Ограничения: `max_indexes`, `max_index_size_mb`, `max_table_indexes`. Реализация в `runner/lab.py`.
+
+`lab selftest` проверяет каждое задание: эталон проходит, исходная заготовка и решения из `solutions/<задание>/wrong/` падают, эталон совпадает по результату с исходным запросом. Опции: `--module 1`, `--task 1.3`, `--repeat 10` (стабильность плана), `-v` (подробный отчёт). Перед публикацией задания прогоняйте selftest на обоих масштабах.

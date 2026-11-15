@@ -1,0 +1,6 @@
+id: "0.2"
+title: Топ-5 стран по числу клиентов
+type: query
+ordered: true
+rules:
+  - results_equal: true

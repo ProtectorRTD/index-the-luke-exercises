@@ -1,0 +1,10 @@
+id: "1.1"
+title: Поиск клиента по email
+type: index
+limits:
+  max_indexes: 1
+rules:
+  - results_equal: true
+  - must_not_have_node: { node: Seq Scan, relation: customers }
+  - must_have_node: { node: [Index Scan, Index Only Scan], relation: customers }
+  - max_buffers: { s: 6, m: 7 }

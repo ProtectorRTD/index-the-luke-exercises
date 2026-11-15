@@ -1,0 +1,7 @@
+# Типичная ошибка: отключили только seqscan, получили Bitmap Heap Scan
+scan_one: Bitmap Heap Scan
+buffers_one: 10
+scan_heavy: Seq Scan
+buffers_heavy: 10304
+scan_heavy_forced: Bitmap Heap Scan
+buffers_heavy_forced: 10688

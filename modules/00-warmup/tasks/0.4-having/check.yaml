@@ -1,0 +1,6 @@
+id: "0.4"
+title: Средний чек по крупным статусам
+type: query
+ordered: false
+rules:
+  - results_equal: true

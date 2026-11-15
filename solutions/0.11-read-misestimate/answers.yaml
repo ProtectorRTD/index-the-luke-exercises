@@ -1,0 +1,19 @@
+# Эталон ответов: план статичный, значения фиксированы.
+misestimated_table:
+  label: "при чтении какой таблицы (orders или customers) оценка числа строк ошиблась сильнее всего (misestimated_table)"
+  value: ["orders", "o"]
+estimated_rows:
+  label: "сколько строк там ожидал планировщик (estimated_rows)"
+  value: 5000
+actual_rows:
+  label: "сколько строк там вернулось на самом деле (actual_rows)"
+  value: 359294
+aggregate_node:
+  label: "каким узлом выполняется группировка (aggregate_node)"
+  value: "HashAggregate"
+groups:
+  label: "сколько групп (строк) вернула группировка (groups)"
+  value: 21
+sort_method:
+  label: "какой метод сортировки использован (Sort Method) (sort_method)"
+  value: "top-N heapsort"

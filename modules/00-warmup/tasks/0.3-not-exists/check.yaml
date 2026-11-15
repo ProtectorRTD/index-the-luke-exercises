@@ -1,0 +1,6 @@
+id: "0.3"
+title: Клиенты без заказов
+type: query
+ordered: false
+rules:
+  - results_equal: true

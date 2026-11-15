@@ -1,0 +1,7 @@
+# Задание 0.10. Впишите ответы после двоеточия.
+join_node:
+outer_table:
+inner_loops:
+inner_rows_per_loop:
+inner_rows_total:
+inner_expected_per_loop:

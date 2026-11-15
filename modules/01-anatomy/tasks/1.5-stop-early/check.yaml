@@ -1,0 +1,6 @@
+id: "1.5"
+title: Остановиться на первой строке
+type: query
+rules:
+  - results_equal: true
+  - max_buffers: { s: 10, m: 10 }
