@@ -14,7 +14,3 @@
 
 1. Напишите запрос в `solution.sql`. Пробуйте его в `lab psql`.
 2. Запустите `lab check 0.6`.
-
-## Какой SQL понадобится
-
-`date_trunc('month', ...)`, приведение `::date`, условие на диапазон дат, `GROUP BY`, `sum`. Примеры в [cheatsheet.md](../../cheatsheet.md).

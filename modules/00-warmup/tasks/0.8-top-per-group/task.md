@@ -14,7 +14,3 @@
 
 1. Напишите запрос в `solution.sql`. Пробуйте его в `lab psql`.
 2. Запустите `lab check 0.8`.
-
-## Какой SQL понадобится
-
-Соединение четырёх таблиц, `GROUP BY`, `row_number() OVER (PARTITION BY ... ORDER BY ...)`, фильтр по номеру во внешнем запросе. Примеры в [cheatsheet.md](../../cheatsheet.md).

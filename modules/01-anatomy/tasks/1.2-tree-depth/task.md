@@ -25,8 +25,4 @@ CREATE INDEX orders_created_at_idx ON orders (created_at);
 
 Запустите `lab check 1.2`.
 
-## Какой SQL понадобится
-
-`bt_metap`, `bt_page_stats`, `generate_series`, `avg`, `round`. Всё есть в шпаргалке.
-
 После PASS ответьте себе: на сколько вырастет `level`, если строк станет в 100 раз больше?

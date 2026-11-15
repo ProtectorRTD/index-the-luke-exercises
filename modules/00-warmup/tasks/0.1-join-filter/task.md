@@ -12,7 +12,3 @@
 
 1. Напишите запрос в `solution.sql`. Пробуйте его в `lab psql`.
 2. Запустите `lab check 0.1`.
-
-## Какой SQL понадобится
-
-`JOIN ... ON`, `WHERE` с двумя условиями через `AND`, `count(*)`. Примеры в [cheatsheet.md](../../cheatsheet.md).

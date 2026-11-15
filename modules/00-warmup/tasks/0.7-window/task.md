@@ -17,7 +17,3 @@
 
 1. Напишите запрос в `solution.sql`. Пробуйте его в `lab psql`.
 2. Запустите `lab check 0.7`.
-
-## Какой SQL понадобится
-
-CTE (`WITH`), оконные функции `sum(...) OVER (ORDER BY ...)` и `lag(...) OVER (ORDER BY ...)`. Примеры в [cheatsheet.md](../../cheatsheet.md).

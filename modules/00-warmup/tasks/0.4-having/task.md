@@ -12,7 +12,3 @@
 
 1. Напишите запрос в `solution.sql`. Пробуйте его в `lab psql`.
 2. Запустите `lab check 0.4`.
-
-## Какой SQL понадобится
-
-`GROUP BY`, `HAVING`, `avg`, `round(x, 2)`. Примеры в [cheatsheet.md](../../cheatsheet.md).

@@ -14,7 +14,3 @@
 
 1. Напишите запрос в `solution.sql`. Пробуйте его в `lab psql`.
 2. Запустите `lab check 0.2`.
-
-## Какой SQL понадобится
-
-`GROUP BY`, `count(*)`, `ORDER BY` по двум ключам, `LIMIT`. Примеры в [cheatsheet.md](../../cheatsheet.md).

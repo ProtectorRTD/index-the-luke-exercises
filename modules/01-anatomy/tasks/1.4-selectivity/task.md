@@ -42,8 +42,4 @@ SELECT count(*), min(email) FROM customers WHERE ___;
 - в плане `b.sql` есть `Bitmap Heap Scan` по `customers` и `Bitmap Index Scan` через `customers_created_at_idx`;
 - в плане `c.sql` есть `Seq Scan` по `customers`.
 
-## Какой SQL понадобится
-
-Сравнения `=`, `<`, `>=`, `BETWEEN` для дат: `created_at >= '2024-01-01' AND created_at < '2024-02-01'`. Как посчитать долю строк, есть в [cheatsheet.md](../../cheatsheet.md).
-
 После PASS запишите в `prediction.md` настоящие доли строк, при которых менялся план. Совпало с прогнозом?
