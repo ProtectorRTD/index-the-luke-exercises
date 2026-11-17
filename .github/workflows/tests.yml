@@ -1,0 +1,48 @@
+# Проверяет все задания ветки и загружает JUnit-отчёт как артефакт junit-report.
+#
+# Запуск вручную: Actions → tests → Run workflow, выбрать ветку.
+# Через API: POST /repos/{owner}/{repo}/actions/workflows/tests.yml/dispatches с {"ref": "<ветка>"}.
+#
+# Имя файла, имя артефакта и триггер workflow_dispatch — контракт с приложением Test Runner,
+# менять их нельзя.
+name: tests
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start PostgreSQL
+        run: |
+          docker compose up -d --wait db
+          docker compose --profile tools build lab
+
+      - name: Seed data (scale s)
+        run: docker compose --profile tools run --rm -T -e NO_COLOR=1 lab seed --scale s
+
+      - name: Check all tasks
+        run: docker compose --profile tools run --rm -T -e NO_COLOR=1 lab check --all --junit .lab/junit/report.xml
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: junit-report
+          path: .lab/junit/*.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker compose down -v
