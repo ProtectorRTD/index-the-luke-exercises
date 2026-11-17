@@ -9,6 +9,12 @@ name: tests
 
 on:
   workflow_dispatch:
+    inputs:
+      selftest:
+        description: "Для авторов: дополнительно прогнать lab selftest (эталоны на раннере)"
+        type: boolean
+        required: false
+        default: false
   push:
 
 permissions:
@@ -30,6 +36,10 @@ jobs:
 
       - name: Seed data (scale s)
         run: docker compose --profile tools run --rm -T -e NO_COLOR=1 lab seed --scale s
+
+      - name: Selftest (only on request)
+        if: ${{ inputs.selftest }}
+        run: docker compose --profile tools run --rm -T -e NO_COLOR=1 lab selftest
 
       - name: Check all tasks
         run: docker compose --profile tools run --rm -T -e NO_COLOR=1 lab check --all --junit .lab/junit/report.xml
