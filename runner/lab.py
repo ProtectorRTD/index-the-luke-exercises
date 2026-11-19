@@ -15,6 +15,8 @@ import re
 import subprocess
 import sys
 import time
+import traceback
+import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -82,7 +84,11 @@ def bold(t):
 
 
 class LabError(Exception):
-    pass
+    """Сбой не по вине решения: база, setup.sql, эталон, сам lab.py. В отчёте — ERROR."""
+
+
+class SolutionError(LabError):
+    """Ошибка в файлах решения: запрещённая команда, синтаксис, таймаут, пустой файл. В отчёте — FAILED."""
 
 
 # ---------------------------------------------------------------------------
@@ -189,19 +195,20 @@ def check_forbidden(statements, extra):
     return sorted(set(problems))
 
 
-def read_query_file(path, allow=QUERY_ALLOWED):
+def read_query_file(path, allow=QUERY_ALLOWED, err=LabError):
+    """Читает файл с одним запросом. err=SolutionError для файлов, которые пишет человек."""
     if not path.exists():
-        raise LabError(f"нет файла {path.relative_to(ROOT)}")
+        raise err(f"нет файла {path.relative_to(ROOT)}")
     stmts = split_sql(path.read_text(encoding="utf-8"))
     if not stmts:
-        raise LabError(f"{path.name} пустой: напишите запрос")
+        raise err(f"{path.name}: нет решения")
     if len(stmts) != 1:
-        raise LabError(f"{path.name} должен содержать ровно один запрос, а в нём {len(stmts)}")
+        raise err(f"{path.name} должен содержать ровно один запрос, а в нём {len(stmts)}")
     q = stmts[0]
     if "___" in q:
-        raise LabError(f"в {path.name} остались пропуски ___: заполните их")
+        raise err(f"в {path.name} остались пропуски ___: заполните их")
     if not allow.match(q):
-        raise LabError(f"{path.name}: ожидается запрос SELECT/WITH, а не «{q.split()[0]}»")
+        raise err(f"{path.name}: ожидается запрос SELECT/WITH, а не «{q.split()[0]}»")
     return q
 
 
@@ -277,15 +284,20 @@ DEALLOCATE ALL;
 """
 
 
-def reset_db(quiet=False):
-    require_seed()
-    psql(RESET_SQL)
+def modified_base_tables():
+    """Базовые таблицы, в которых менялись данные после генерации."""
     psql("SELECT pg_stat_force_next_flush();")
-    changed = psql("""
+    return psql("""
         SELECT s.relname FROM pg_stat_user_tables s
         JOIN lab_meta.table_stats t USING (relname)
         WHERE s.schemaname = 'public' AND s.n_tup_upd + s.n_tup_del + s.n_tup_ins > t.changes
     """).split()
+
+
+def reset_db(quiet=False):
+    require_seed()
+    psql(RESET_SQL)
+    changed = modified_base_tables()
     if changed and not quiet:
         print(red("Внимание: данные в таблицах " + ", ".join(changed) + " менялись после генерации."))
         print(red("Планы и пороги могут разойтись с эталоном. Перегенерируйте: lab seed --scale "
@@ -567,12 +579,27 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def first_error_line(e):
+    for line in str(e).splitlines():
+        line = line.strip()
+        if line:
+            return re.sub(r"^psql:[^:]*:\d+:\s*", "", line)
+    return ""
+
+
 class Result:
     def __init__(self):
         self.items = []  # (ok, text)
         self.error = None
+        self.error_kind = None  # "failure" — ошибка в решении, "error" — сбой проверки
         self.plans = []  # (title, before, after)
         self.score = []  # строки со счётом для заданий на проектирование
+        self.headline = []  # строки в начало подробного отчёта
+        self.notes = []  # дополнительные строки отчёта
+        self.metrics = {}  # числа для <properties> в JUnit
+        self.wrong_answers = []  # ключи неверных ответов (без эталонных значений)
+        self.answers_total = 0
+        self.total_fail = None  # сообщение о превышении общего лимита страниц
 
     def add(self, ok, text):
         self.items.append((ok, text))
@@ -590,23 +617,23 @@ def run_setup(task):
 
 def apply_index_solution(task, path, res, limits):
     if not path.exists():
-        raise LabError(f"нет файла {path.relative_to(ROOT)}")
+        raise SolutionError(f"нет файла {path.relative_to(ROOT)}")
     stmts = split_sql(path.read_text(encoding="utf-8"))
     if not stmts:
-        raise LabError(f"{path.name} пустой: в нём пока нет ни одной команды")
+        raise SolutionError(f"{path.name}: нет решения")
     extra = [re.compile(p, re.I) for p in task.get("allowed_sql", [])]
     bad = [s for s in stmts if not INDEX_TASK_ALLOWED.match(s) and not any(p.match(s) for p in extra)]
     if bad:
-        raise LabError("в этом задании разрешены только CREATE INDEX, DROP INDEX, ANALYZE, VACUUM. "
-                       f"Лишнее: «{short(bad[0], 50)}»")
+        raise SolutionError("в этом задании разрешены только CREATE INDEX, DROP INDEX, ANALYZE, VACUUM. "
+                            f"Лишнее: «{short(bad[0], 50)}»")
     problems = check_forbidden(stmts, task.get("forbidden_sql", []))
     if problems:
-        raise LabError("; ".join(problems))
+        raise SolutionError("; ".join(problems))
     before = list_indexes()
     try:
         psql(";\n".join(stmts) + ";\n")
     except LabError as e:
-        raise LabError(f"ошибка при выполнении {path.name}:\n{e}")
+        raise SolutionError(f"ошибка при выполнении {path.name}:\n{e}")
     after = list_indexes()
     new = {k: v for k, v in after.items() if k not in before}
     if "max_indexes" in limits:
@@ -623,6 +650,9 @@ def apply_index_solution(task, path, res, limits):
                 f"новые индексы занимают не больше {limits['max_index_size_mb']} МБ ({size:.1f} МБ)")
     for chk in task.get("post_checks", []):
         res.add(scalar(f"SELECT ({chk['sql']})::boolean") == "t", chk["message"])
+    if new:
+        res.notes.append("Новые индексы: " + ", ".join(
+            f"{name} на {table}, {size / 1024 / 1024:.1f} МБ" for name, (table, size) in new.items()))
     return new
 
 
@@ -644,7 +674,12 @@ def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, b
         if reference is None:
             raise LabError("для results_equal нет эталонного запроса")
         exp_rows = run_rows(reference, writes=writes, settings=settings)
-        got_rows = run_rows(query, writes=writes, settings=settings)
+        try:
+            got_rows = run_rows(query, writes=writes, settings=settings)
+        except SolutionError:
+            raise
+        except LabError as e:
+            raise SolutionError(f"{prefix}запрос не выполнился: {first_error_line(e)}\n{e}")
         ordered = spec.get("ordered", task.get("ordered", False))
         if not ordered:
             exp_rows, got_rows = sorted(exp_rows), sorted(got_rows)
@@ -659,12 +694,19 @@ def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, b
                 if diff is not None:
                     detail += f"; первое расхождение в строке {diff + 1}"
             detail += ")"
+            res.headline.append(f"{prefix}результат не совпадает с эталоном: получено строк {len(got_rows)}, "
+                                f"ожидалось {len(exp_rows)}")
         res.add(ok, prefix + "результат совпадает с эталоном" + ("" if not ordered else ", включая порядок")
                 + detail)
     plan_rules = [r for r in rules if rule_label(r)[0] in PLAN_RULES]
     if not plan_rules and not force_plan:
         return
-    plan = explain(query, writes=writes, settings=settings)
+    try:
+        plan = explain(query, writes=writes, settings=settings)
+    except SolutionError:
+        raise
+    except LabError as e:
+        raise SolutionError(f"{prefix}запрос не выполнился: {first_error_line(e)}\n{e}")
     for r in plan_rules:
         name, arg = rule_label(r)
         ok, text = eval_plan_rule(name, arg, plan, scale)
@@ -750,19 +792,28 @@ def check_answers(task, res, scale, answers_override=None):
     else:
         path = task["dir"] / "answers.yaml"
         if not path.exists():
-            raise LabError("нет файла answers.yaml")
+            raise SolutionError("нет файла answers.yaml")
         try:
             got = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
-            raise LabError(f"answers.yaml не разбирается: {e}")
+            raise SolutionError(f"answers.yaml не разбирается: {e}")
+        if not isinstance(got, dict):
+            raise SolutionError("answers.yaml должен состоять из строк вида «ключ: значение»")
+    res.answers_total = len(expected)
     for key, spec in expected.items():
         exp = compute_expected(spec, scale)
         value = got.get(key)
         question = spec.get("label", key) if isinstance(spec, dict) else key
+        tol = spec.get("tolerance") if isinstance(spec, dict) else None
+        tol_text = f", допуск ±{tol * 100:g}%" if tol else ""
         if value is None or str(value).strip() == "":
             res.add(False, f"{question}: нет ответа")
+            res.wrong_answers.append(key)
             continue
-        res.add(answer_matches(value, exp, spec), f"{question}: ответ «{value}»")
+        ok = answer_matches(value, exp, spec)
+        res.add(ok, f"{question}: ответ «{value}»{tol_text}")
+        if not ok:
+            res.wrong_answers.append(key)
     return expected
 
 
@@ -783,6 +834,8 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
         baseline_path = task["dir"] / "query.sql"
         baseline = read_query_file(baseline_path) if baseline_path.exists() and show_baseline else None
 
+        if ttype not in ("index", "mixed", "query"):
+            raise LabError(f"неизвестный тип задания {ttype}")
         if ttype == "index":
             parts = task.get("parts") or [dict(task, file="query.sql", label="")]
             queries = [read_query_file(task["dir"] / p["file"]) for p in parts]
@@ -793,8 +846,7 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
             for part, query, before in zip(parts, queries, befores):
                 label = part.get("label", part["file"]) if task.get("parts") else ""
                 n_plans = len(res.plans)
-                evaluate_query(task, part, query, res, scale, label=label, reference=query,
-                               force_plan=bool(total))
+                evaluate_query(task, part, query, res, scale, label=label, reference=query, force_plan=True)
                 if len(res.plans) > n_plans:
                     res.plans[-1] = (label, before, res.plans[-1][2])
             if total:
@@ -802,25 +854,33 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
                 if "max_total_buffers" in total:
                     limit = total["max_total_buffers"][scale]
                     res.add(pages <= limit, f"все запросы вместе читают не больше {limit} страниц (сейчас {pages})")
+                    if pages > limit:
+                        res.total_fail = f"все запросы читают {pages} страниц, лимит {limit}"
                 size_mb = sum(v[1] for v in new_indexes.values()) / 1024 / 1024
                 res.score.append(f"страниц на все запросы: {pages} · новых индексов: {len(new_indexes)} "
                                  f"· их размер: {size_mb:.1f} МБ")
+                res.metrics.update(total_buffers=pages, new_indexes=len(new_indexes),
+                                   index_size_mb=f"{size_mb:.1f}")
         elif ttype == "mixed":
             apply_index_solution(task, files.get("indexes.sql", task["dir"] / "indexes.sql"), res, limits)
             sol = files.get("solution.sql", task["dir"] / "solution.sql")
-            query = read_query_file(sol)
+            query = read_query_file(sol, err=SolutionError)
             problems = check_forbidden([query], task.get("forbidden_sql", []))
             if problems:
-                raise LabError("; ".join(problems))
+                raise SolutionError("; ".join(problems))
             reference = read_query_file(reference_path)
-            evaluate_query(task, task, query, res, scale, reference=reference, baseline=baseline)
+            evaluate_query(task, task, query, res, scale, reference=reference, baseline=baseline,
+                           force_plan=True)
         elif ttype == "query":
             if task.get("parts"):
                 for part in task["parts"]:
                     path = files.get(part["file"], task["dir"] / part["file"])
+                    if source == "student" and untouched_reason(task, part["file"]):
+                        res.add(False, f"{part['file']}: нет решения")
+                        continue
                     try:
-                        q = read_query_file(path)
-                    except LabError as e:
+                        q = read_query_file(path, err=SolutionError)
+                    except SolutionError as e:
                         res.add(False, f"{part['file']}: {e}")
                         continue
                     problems = check_forbidden([q], task.get("forbidden_sql", []))
@@ -830,44 +890,236 @@ def check_task(task, *, source="student", files=None, answers_override=None, sho
                     ref = None
                     if any(rule_label(r)[0] == "results_equal" for r in part.get("rules", [])):
                         ref = read_query_file(solution_dir(task) / part["file"])
-                    evaluate_query(task, part, q, res, scale, label=part["file"], reference=ref)
+                    evaluate_query(task, part, q, res, scale, label=part["file"], reference=ref, force_plan=True)
             else:
                 sol = files.get("solution.sql", task["dir"] / "solution.sql")
-                query = read_query_file(sol)
+                query = read_query_file(sol, err=SolutionError)
                 problems = check_forbidden([query], task.get("forbidden_sql", []))
                 if problems:
-                    raise LabError("; ".join(problems))
+                    raise SolutionError("; ".join(problems))
                 reference = read_query_file(reference_path)
-                evaluate_query(task, task, query, res, scale, reference=reference, baseline=baseline)
-        else:
-            raise LabError(f"неизвестный тип задания {ttype}")
+                evaluate_query(task, task, query, res, scale, reference=reference, baseline=baseline,
+                               force_plan=True)
     except LabError as e:
         res.error = str(e)
+        res.error_kind = "failure" if isinstance(e, SolutionError) else "error"
+    if res.plans:
+        res.metrics.setdefault("buffers", sum(total_buffers(p[2]) for p in res.plans))
+        res.metrics.setdefault("execution_ms", f"{sum(p[2].get('Execution Time', 0) for p in res.plans):.2f}")
     return res
 
 
-def print_result(task, res, verbose_plan=True):
-    print()
-    print(bold(f"Задание {task['id']}. {task['title']}")
-          + dim(f"  [{LEVEL_NAMES[task.get('level', 'base')]} · {TYPE_NAMES[task['type']]}]"))
+def render_result(task, res, verbose_plan=True):
+    """Текст отчёта по заданию. Цвета — только если включены для терминала."""
+    out = ["", bold(f"Задание {task['id']}. {task['title']}")
+           + dim(f"  [{LEVEL_NAMES.get(task.get('level', 'base'), task.get('level'))} · "
+                 f"{TYPE_NAMES.get(task['type'], task['type'])}]")]
+    for line in res.headline:
+        out.append(red("  ! ") + line)
     for ok, text in res.items:
         mark = green("  [OK]  ") if ok else red("  [FAIL]")
-        print(f"{mark} {text}")
+        out.append(f"{mark} {text}")
     if res.error:
-        print(red("  [ERROR] ") + res.error.replace("\n", "\n          "))
+        label = "  [FAIL]  " if res.error_kind == "failure" else "  [ERROR] "
+        out.append(red(label) + res.error.replace("\n", "\n          "))
+    for line in res.notes:
+        out.append(dim("  " + line))
     if verbose_plan:
         for label, before, after in res.plans:
             if before is not None:
-                print(dim(f"\n  Было{(' (' + label + ')') if label else ''}: {plan_summary(before)}"))
-                print(format_plan(before))
-            print(f"\n  {'Стало' if before is not None else 'План'}"
-                  f"{(' (' + label + ')') if label else ''}: {plan_summary(after)}")
-            print(format_plan(after))
+                out.append(dim(f"\n  Было{(' (' + label + ')') if label else ''}: {plan_summary(before)}"))
+                out.append(format_plan(before))
+            out.append(f"\n  {'Стало' if before is not None else 'План'}"
+                       f"{(' (' + label + ')') if label else ''}: {plan_summary(after)}")
+            out.append(format_plan(after))
     for line in res.score:
-        print(bold("\n  Счёт: ") + line)
-    print()
-    print(bold("  ИТОГ: ") + (green(bold("PASS")) if res.passed else red(bold("FAIL"))))
-    print()
+        out.append(bold("\n  Счёт: ") + line)
+    out.append("")
+    out.append(bold("  ИТОГ: ") + (green(bold("PASS")) if res.passed else red(bold("FAIL"))))
+    out.append("")
+    return "\n".join(out)
+
+
+def print_result(task, res, verbose_plan=True):
+    print(render_result(task, res, verbose_plan))
+
+
+# ---------------------------------------------------------------------------
+# «Не начато», статусы и JUnit-отчёт
+# ---------------------------------------------------------------------------
+
+def solution_files(task):
+    """Файлы, которые заполняет человек. None — тип задания неизвестен."""
+    ttype = task.get("type")
+    if ttype == "answers":
+        return ["answers.yaml"]
+    if ttype == "index":
+        return ["solution.sql"]
+    if ttype == "mixed":
+        return ["indexes.sql", "solution.sql"]
+    if ttype == "query":
+        return [p["file"] for p in task["parts"]] if task.get("parts") else ["solution.sql"]
+    return None
+
+
+def normalized_sql(text):
+    return re.sub(r"\s+", " ", " ; ".join(split_sql(text))).strip().lower()
+
+
+def untouched_reason(task, name):
+    """Почему файл решения выглядит как нетронутая заготовка. None — файл заполнен."""
+    path = task["dir"] / name
+    if not path.exists():
+        return f"нет файла {name}"
+    text = path.read_text(encoding="utf-8")
+    if name.endswith(".yaml"):
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError:
+            return None  # что-то написано, пусть проверка покажет ошибку разбора
+        if not data or (isinstance(data, dict) and all(v is None or str(v).strip() == "" for v in data.values())):
+            return f"{name} не заполнен"
+        return None
+    norm = normalized_sql(text)
+    if not norm:
+        return f"{name} пустой"
+    if "___" in norm:
+        return f"в {name} заготовка с пропусками ___"
+    original = task["dir"] / "query.sql"
+    if task.get("type") in ("query", "mixed") and original.exists() \
+            and norm == normalized_sql(original.read_text(encoding="utf-8")):
+        return f"{name} совпадает с исходным запросом"
+    return None
+
+
+def not_started_reason(task):
+    """Если все файлы решения нетронуты — причина для SKIPPED, иначе None."""
+    names = solution_files(task)
+    if names is None:
+        return None
+    reasons = [untouched_reason(task, n) for n in names]
+    if all(reasons):
+        return "; ".join(reasons)
+    return None
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+XML_BAD_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def plain(text):
+    """Текст для XML: без ANSI-кодов и управляющих символов."""
+    return XML_BAD_CHARS.sub("", ANSI_RE.sub("", text or ""))
+
+
+class Outcome:
+    def __init__(self, task, status, message="", details="", properties=None):
+        self.task = task
+        self.status = status  # passed | failed | error | skipped
+        self.message = message
+        self.details = details
+        self.properties = properties or {}
+        self.time = 0.0
+
+
+def failure_message(res):
+    if res.answers_total and (res.wrong_answers or not res.error):
+        n = len(res.wrong_answers)
+        msg = f"неверно {n} из {res.answers_total}: " + ", ".join(res.wrong_answers)
+    elif res.error:
+        msg = res.error.strip().splitlines()[0]
+    elif res.total_fail:
+        msg = res.total_fail
+        rest = sum(1 for ok, t in res.items if not ok and not t.startswith("все запросы вместе"))
+        if rest:
+            msg += f" (и ещё {rest})"
+    else:
+        failed = [t for ok, t in res.items if not ok]
+        if not failed:
+            return "задание не прошло проверку"
+        if res.headline:
+            msg = res.headline[0]
+        elif failed[0].endswith(("нет решения", "нет ответа")):
+            msg = failed[0]
+        else:
+            msg = f"{failed[0]} — не выполнено"
+        if len(failed) > 1:
+            msg += f" (и ещё {len(failed) - 1})"
+    return msg if len(msg) <= 200 else msg[:199] + "…"
+
+
+def outcome_from_result(task, res):
+    props = {"level": task.get("level", "base"), "type": task["type"]}
+    props.update(res.metrics)
+    if res.passed:
+        return Outcome(task, "passed", properties=props)
+    details = plain(render_result(task, res, verbose_plan=True)).strip("\n")
+    if res.score:
+        details = "Счёт: " + res.score[0] + "\n\n" + details
+    if res.error and res.error_kind == "error":
+        return Outcome(task, "error", plain(first_error_line(res.error)), details, props)
+    return Outcome(task, "failed", plain(failure_message(res)), details, props)
+
+
+def write_junit(path, outcomes, suite_props):
+    def fmt(t):
+        return f"{t:.3f}"
+
+    def counts(items):
+        return dict(tests=str(len(items)),
+                    failures=str(sum(o.status == "failed" for o in items)),
+                    errors=str(sum(o.status == "error" for o in items)),
+                    skipped=str(sum(o.status == "skipped" for o in items)),
+                    time=fmt(sum(o.time for o in items)))
+
+    root = ET.Element("testsuites", dict(name="Index Lab", **counts(outcomes),
+                                         timestamp=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    modules = []
+    for o in outcomes:
+        name = o.task["module_dir"].name
+        if name not in modules:
+            modules.append(name)
+    for module in modules:
+        items = [o for o in outcomes if o.task["module_dir"].name == module]
+        suite = ET.SubElement(root, "testsuite", dict(name=module, **counts(items)))
+        props = ET.SubElement(suite, "properties")
+        for k, v in suite_props.items():
+            ET.SubElement(props, "property", name=k, value=plain(str(v)))
+        for o in items:
+            case = ET.SubElement(suite, "testcase", classname=module,
+                                 name=plain(f"{o.task['id']} {o.task['title']}"), time=fmt(o.time))
+            if o.properties:
+                cprops = ET.SubElement(case, "properties")
+                for k, v in o.properties.items():
+                    ET.SubElement(cprops, "property", name=k, value=plain(str(v)))
+            if o.status == "failed":
+                el = ET.SubElement(case, "failure", message=plain(o.message), type="AssertionError")
+                el.text = plain(o.details)
+            elif o.status == "error":
+                el = ET.SubElement(case, "error", message=plain(o.message), type="LabError")
+                el.text = plain(o.details)
+            elif o.status == "skipped":
+                ET.SubElement(case, "skipped", message=plain(o.message))
+    ET.indent(root)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(b'<?xml version="1.0" encoding="UTF-8"?>\n')
+        ET.ElementTree(root).write(f, encoding="UTF-8", xml_declaration=False)
+
+
+def suite_properties():
+    props = {"scale": current_scale()}
+    try:
+        props["postgres"] = scalar("SHOW server_version").split()[0]
+    except LabError:
+        pass
+    try:
+        if modified_base_tables():
+            props["data_modified"] = "true"
+    except LabError:
+        pass
+    return props
 
 
 # ---------------------------------------------------------------------------
@@ -902,25 +1154,52 @@ def cmd_reset(args):
 
 def cmd_check(args):
     state = load_state()
-    if args.module is not None:
+    if args.all:
+        tasks = all_tasks()
+    elif args.module is not None:
         tasks = module_tasks(args.module)
     elif args.task:
         tasks = [find_task(args.task)]
     else:
-        raise LabError("укажите задание (lab check 1.1) или модуль (lab check --module 1)")
-    summary = []
-    for task in tasks:
-        res = check_task(task)
-        print_result(task, res, verbose_plan=args.module is None)
-        status = "PASS" if res.passed else "FAIL"
-        summary.append((task["id"], status))
-        state["results"][str(task["id"])] = {"status": status, "at": dt.datetime.now().isoformat(timespec="seconds"),
-                                             "scale": current_scale()}
-    save_state(state)
-    if len(summary) > 1:
-        print(bold("Сводка: ") + "  ".join(
-            f"{tid} {green('PASS') if s == 'PASS' else red('FAIL')}" for tid, s in summary))
-    return 0 if all(s == "PASS" for _, s in summary) else 1
+        raise LabError("укажите задание (lab check 1.1), модуль (lab check --module 1) или все (lab check --all)")
+    require_seed()  # без базы проверять нечего: код возврата 2, отчёт не пишется
+    single = len(tasks) == 1
+    outcomes = []
+    try:
+        for task in tasks:
+            t0 = time.monotonic()
+            try:
+                reason = not_started_reason(task)
+                if reason:
+                    outcome = Outcome(task, "skipped", f"не начато: {reason}",
+                                      properties={"level": task.get("level", "base"), "type": task["type"]})
+                    print(f"\n{bold('Задание ' + str(task['id']) + '. ' + task['title'])}  "
+                          + dim(f"не начато: {reason}"))
+                else:
+                    res = check_task(task)
+                    print_result(task, res, verbose_plan=single)
+                    outcome = outcome_from_result(task, res)
+                    state["results"][str(task["id"])] = {
+                        "status": {"passed": "PASS", "failed": "FAIL", "error": "ERROR"}[outcome.status],
+                        "at": dt.datetime.now().isoformat(timespec="seconds"), "scale": current_scale()}
+            except Exception as e:  # сбой в самом lab.py не должен ронять весь прогон
+                outcome = Outcome(task, "error", plain(f"{type(e).__name__}: {e}"),
+                                  plain(traceback.format_exc()))
+                print(red(f"\nЗадание {task['id']}: ERROR {type(e).__name__}: {e}"))
+            outcome.time = time.monotonic() - t0
+            outcomes.append(outcome)
+    finally:
+        save_state(state)
+        if args.junit:
+            write_junit(args.junit, outcomes, suite_properties())
+            print(dim(f"JUnit-отчёт: {args.junit}"))
+    if len(outcomes) > 1:
+        names = {"passed": green("PASS"), "failed": red("FAIL"), "error": red("ERROR"), "skipped": dim("SKIP")}
+        print(bold("\nСводка: ") + "  ".join(f"{o.task['id']} {names[o.status]}" for o in outcomes))
+        print(dim("пройдено {p}, не пройдено {f}, ошибок {e}, не начато {s}".format(
+            p=sum(o.status == "passed" for o in outcomes), f=sum(o.status == "failed" for o in outcomes),
+            e=sum(o.status == "error" for o in outcomes), s=sum(o.status == "skipped" for o in outcomes))))
+    return 1 if any(o.status in ("failed", "error") for o in outcomes) else 0
 
 
 def cmd_hint(args):
@@ -956,10 +1235,10 @@ def cmd_status(args):
             print(dim(f"-- {mod}"))
         r = state["results"].get(str(t["id"]))
         s = r["status"] if r else "-"
-        s_col = green(s.ljust(6)) if s == "PASS" else red(s.ljust(6)) if s == "FAIL" else s.ljust(6)
+        s_col = green(s.ljust(6)) if s == "PASS" else red(s.ljust(6)) if s in ("FAIL", "ERROR") else s.ljust(6)
         hints = state["hints"].get(str(t["id"]), 0)
-        print(f"{str(t['id']).ljust(8)} {LEVEL_NAMES[t.get('level', 'base')].ljust(15)} "
-              f"{TYPE_NAMES[t['type']].ljust(19)} {s_col}  {str(hints).ljust(9)}  {t['title']}")
+        print(f"{str(t['id']).ljust(8)} {LEVEL_NAMES.get(t.get('level', 'base'), str(t.get('level'))).ljust(15)} "
+              f"{TYPE_NAMES.get(t['type'], t['type']).ljust(19)} {s_col}  {str(hints).ljust(9)}  {t['title']}")
     passed = sum(1 for r in state["results"].values() if r["status"] == "PASS")
     print(dim(f"\nПройдено {passed} из {len(all_tasks())}. Масштаб базы: {current_scale() or 'не сгенерирована'}"))
 
@@ -1099,6 +1378,8 @@ def main(argv=None):
     s = sub.add_parser("check", help="проверить задание")
     s.add_argument("task", nargs="?")
     s.add_argument("--module", type=int)
+    s.add_argument("--all", action="store_true", help="все задания")
+    s.add_argument("--junit", metavar="PATH", help="записать отчёт в формате JUnit XML")
     s.set_defaults(fn=cmd_check)
 
     s = sub.add_parser("hint", help="следующая подсказка")
