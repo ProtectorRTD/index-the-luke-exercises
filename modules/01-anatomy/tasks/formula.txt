@@ -1,0 +1,1 @@
+(8 * hit) / 1024 = amount of mb

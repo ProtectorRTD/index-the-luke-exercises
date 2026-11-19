@@ -28,3 +28,14 @@ WHERE email = 'Peter.Oravec0004242@example.cz';
 - создан ровно один новый индекс.
 
 После PASS ответьте себе: из каких страниц сложилось число в `Buffers`?
+
+formula = 
+
+Было 
+
+Rows Removed by Filter: 99999
+Buffers: shared hit=1408 (11 мегабайт)
+
+Стало
+
+hit 19
