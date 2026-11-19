@@ -1,7 +1,7 @@
 # Задание 1.2. Впишите ответы после двоеточия, числа цифрами.
 level: 2
 depth: 3
-root_items: 
+root_items: 10
 leaf_pages: 2732
-entries_per_leaf: 
+entries_per_leaf: 367
 lookup_buffers: 4
