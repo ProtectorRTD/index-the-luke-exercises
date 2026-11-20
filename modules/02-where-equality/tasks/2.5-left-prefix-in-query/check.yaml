@@ -5,3 +5,15 @@ rules:
   - results_equal: true
   - index_cond_contains: { relation: customers, columns: [country, last_name, first_name] }
   - max_buffers: { s: 220, m: 1000 }
+
+variants:
+  - name: в Бельгии и Дании появилось по одной Jana Novak
+    sql: |
+      CREATE TEMP TABLE v_ids AS
+      SELECT min(id) AS id FROM public.customers WHERE country IN ('BE', 'DK') GROUP BY country;
+      CREATE TEMP VIEW customers AS
+      SELECT id, email,
+             CASE WHEN id IN (SELECT id FROM v_ids) THEN 'jana' ELSE first_name END AS first_name,
+             CASE WHEN id IN (SELECT id FROM v_ids) THEN 'novak' ELSE last_name END AS last_name,
+             country, phone, created_at, deleted_at
+      FROM public.customers;
