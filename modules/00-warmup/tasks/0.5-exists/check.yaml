@@ -4,3 +4,21 @@ type: query
 ordered: true
 rules:
   - results_equal: true
+
+variants:
+  - name: у двух австрийцев без крупных заказов появились заказы ровно на 3000 и на 3000.01
+    sql: |
+      CREATE TEMP TABLE v_at AS
+      SELECT c.id FROM public.customers c
+      WHERE c.country = 'AT'
+        AND EXISTS (SELECT 1 FROM public.orders o WHERE o.customer_id = c.id)
+        AND NOT EXISTS (SELECT 1 FROM public.orders o WHERE o.customer_id = c.id AND o.total > 3000)
+      ORDER BY c.id LIMIT 2;
+      CREATE TEMP TABLE v_set AS
+      SELECT (SELECT min(id) FROM public.orders WHERE customer_id = (SELECT min(id) FROM v_at)) AS id, 3000.00 AS total
+      UNION ALL
+      SELECT (SELECT min(id) FROM public.orders WHERE customer_id = (SELECT max(id) FROM v_at)), 3000.01;
+      CREATE TEMP VIEW orders AS
+      SELECT o.id, o.customer_id, o.status, o.created_at, o.shipped_at,
+             coalesce(s.total, o.total)::numeric(12,2) AS total
+      FROM public.orders o LEFT JOIN v_set s ON s.id = o.id;

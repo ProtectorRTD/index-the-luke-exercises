@@ -4,3 +4,17 @@ type: query
 ordered: true
 rules:
   - results_equal: true
+
+variants:
+  - name: доставленные заказы точно на границах 2025 года (полночь 1 января 2025, 23:59:59.5 31 декабря, полночь 1 января 2026)
+    sql: |
+      CREATE TEMP TABLE v_set (id bigint, created_at timestamptz);
+      INSERT INTO v_set VALUES (1, '2025-01-01 00:00:00+00'), (2, '2025-12-31 23:59:59.5+00'),
+                               (3, '2026-01-01 00:00:00+00');
+      CREATE TEMP VIEW orders AS
+      SELECT o.id, o.customer_id,
+             CASE WHEN s.id IS NULL THEN o.status ELSE 'delivered' END AS status,
+             coalesce(s.created_at, o.created_at) AS created_at,
+             CASE WHEN s.id IS NULL THEN o.shipped_at ELSE s.created_at + interval '1 day' END AS shipped_at,
+             o.total
+      FROM public.orders o LEFT JOIN v_set s ON s.id = o.id;

@@ -4,3 +4,17 @@ type: query
 ordered: false
 rules:
   - results_equal: true
+
+variants:
+  - name: появился новый статус lost, в нём 25 000 заказов
+    sql: |
+      CREATE TEMP VIEW orders AS
+      SELECT id, customer_id, CASE WHEN id <= 25000 THEN 'lost' ELSE status END AS status,
+             created_at, shipped_at, total
+      FROM public.orders;
+  - name: появился новый статус lost, в нём ровно 20 000 заказов
+    sql: |
+      CREATE TEMP VIEW orders AS
+      SELECT id, customer_id, CASE WHEN id <= 20000 THEN 'lost' ELSE status END AS status,
+             created_at, shipped_at, total
+      FROM public.orders;

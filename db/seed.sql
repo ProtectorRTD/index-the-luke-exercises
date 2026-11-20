@@ -309,5 +309,23 @@ ALTER TABLE ticket_tags ALTER COLUMN tag_id SET NOT NULL,
                         ALTER COLUMN ticket_id SET NOT NULL,
                         ADD PRIMARY KEY (tag_id, ticket_id);
 
+-- Статистика планировщика без случайности. Обычный ANALYZE берёт случайную выборку
+-- в 30 000 строк, и на пограничных запросах план менялся от генерации к генерации.
+-- Выборка 300 × 10 000 = 3 млн строк: на масштабе s это вся таблица (статистика
+-- одинаковая всегда), на m разброс оценок примерно в 10 раз меньше обычного.
+-- Размеры списков частых значений и гистограмм у остальных колонок не меняются.
+DO $$
+DECLARE r record;
+BEGIN
+    FOR r IN
+        SELECT c.relname, a.attname FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = 1
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I SET STATISTICS 10000', r.relname, r.attname);
+    END LOOP;
+END $$;
+
 VACUUM (ANALYZE, FREEZE);
 CHECKPOINT;

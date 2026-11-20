@@ -6,3 +6,29 @@ rules:
   - must_not_have_node: { node: Seq Scan, relation: orders }
   - must_not_have_node: { node: Seq Scan, relation: customers }
   - max_buffers: { s: 60, m: 800 }
+
+variants:
+  - name: заказ 830947 принадлежит клиенту с этим email
+    sql: |
+      CREATE TEMP VIEW orders AS
+      SELECT id,
+             CASE WHEN id = 830947
+                  THEN (SELECT id FROM public.customers WHERE email = 'Peter.Oravec0004242@example.cz')
+                  ELSE customer_id END AS customer_id,
+             status, created_at, shipped_at, total
+      FROM public.orders;
+  - name: заказ 830947 принадлежит другому клиенту
+    sql: |
+      CREATE TEMP VIEW orders AS
+      SELECT id, CASE WHEN id = 830947 THEN 1 ELSE customer_id END AS customer_id,
+             status, created_at, shipped_at, total
+      FROM public.orders;
+  - name: этот email теперь у другого клиента
+    sql: |
+      CREATE TEMP VIEW customers AS
+      SELECT id,
+             CASE WHEN id = 77 THEN 'Peter.Oravec0004242@example.cz'
+                  WHEN email = 'Peter.Oravec0004242@example.cz' THEN 'old.' || email
+                  ELSE email END AS email,
+             first_name, last_name, country, phone, created_at, deleted_at
+      FROM public.customers;
