@@ -1,11 +1,11 @@
 # Задание 1.6. Впишите ответы после двоеточия, числа цифрами.
-relpages:
-reltuples:
-seq_page_cost:
-cpu_tuple_cost:
-cpu_operator_cost:
-seq_scan_cost:
-freq_sk:
-estimated_rows:
-actual_rows:
-seq_scan_cost_ua:
+relpages: 1408
+reltuples: 100000
+seq_page_cost: 1
+cpu_tuple_cost: 0.01
+cpu_operator_cost: 0.0025
+seq_scan_cost: 2658
+freq_sk: 0.6023333
+estimated_rows: 60233
+actual_rows: 60351
+seq_scan_cost_ua: 2658
