@@ -4,3 +4,9 @@ type: query
 ordered: false
 rules:
   - results_equal: true
+
+variants:
+  - name: у трёх клиентов удалили все заказы
+    sql: |
+      CREATE TEMP VIEW orders AS
+      SELECT * FROM public.orders WHERE customer_id NOT IN (50001, 50002, 50003);

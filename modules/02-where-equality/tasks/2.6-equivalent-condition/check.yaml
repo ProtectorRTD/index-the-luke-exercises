@@ -6,3 +6,14 @@ rules:
   - index_cond_contains: { relation: orders, columns: [customer_id, status] }
   - max_rows_removed_by_filter: 0
   - max_buffers: { s: 60, m: 60 }
+
+variants:
+  - name: у клиента 17 добавились неотправленные заказы в каждом из статусов pending, processing, cancelled
+    sql: |
+      CREATE TEMP TABLE v_set AS
+      SELECT id, (ARRAY['pending', 'processing', 'cancelled'])[row_number() OVER (ORDER BY id)] AS status
+      FROM (SELECT id FROM public.orders WHERE customer_id = 17 AND status = 'delivered' ORDER BY id LIMIT 3) t;
+      CREATE TEMP VIEW orders AS
+      SELECT o.id, o.customer_id, coalesce(s.status, o.status) AS status, o.created_at,
+             CASE WHEN s.id IS NULL THEN o.shipped_at END AS shipped_at, o.total
+      FROM public.orders o LEFT JOIN v_set s ON s.id = o.id;

@@ -4,3 +4,25 @@ type: query
 ordered: true
 rules:
   - results_equal: true
+
+variants:
+  - name: у страны с шестого места и ниже клиентов стало столько же, сколько у пятой
+    sql: |
+      -- кандидат: первая по алфавиту страна ниже пятого места;
+      -- недостающих клиентов «переселяем» к ней из последней по числу клиентов страны
+      CREATE TEMP TABLE v_rank AS
+      SELECT country, count(*) AS n, row_number() OVER (ORDER BY count(*) DESC, country) AS rn
+      FROM public.customers GROUP BY country;
+      CREATE TEMP TABLE v_target AS
+      SELECT country, (SELECT n FROM v_rank WHERE rn = 5) - n AS need
+      FROM v_rank WHERE rn > 5 ORDER BY country LIMIT 1;
+      CREATE TEMP TABLE v_ids AS
+      SELECT id FROM public.customers
+      WHERE country = (SELECT country FROM v_rank WHERE country <> (SELECT country FROM v_target)
+                       ORDER BY rn DESC LIMIT 1)
+      ORDER BY id LIMIT (SELECT need FROM v_target);
+      CREATE TEMP VIEW customers AS
+      SELECT id, email, first_name, last_name,
+             CASE WHEN id IN (SELECT id FROM v_ids) THEN (SELECT country FROM v_target) ELSE country END AS country,
+             phone, created_at, deleted_at
+      FROM public.customers;

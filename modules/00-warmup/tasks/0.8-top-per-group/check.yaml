@@ -4,3 +4,22 @@ type: query
 ordered: true
 rules:
   - results_equal: true
+
+variants:
+  - name: в нескольких категориях два товара продали одинаковое число штук
+    sql: |
+      -- в категориях товаров 2, 3, 4 и 5 продажи товара с наименьшим id заменяются копией
+      -- продаж следующего по id товара той же категории: в каждой такой категории ничья
+      CREATE TEMP TABLE v_pair AS
+      SELECT min(id) AS keep_id,
+             (SELECT id FROM public.products p2 WHERE p2.category_id = p.category_id
+              ORDER BY id OFFSET 1 LIMIT 1) AS copy_id
+      FROM public.products p
+      WHERE category_id IN (SELECT category_id FROM public.products WHERE id IN (2, 3, 4, 5))
+      GROUP BY category_id;
+      CREATE TEMP VIEW order_items AS
+      SELECT id, order_id, product_id, quantity, unit_price
+      FROM public.order_items WHERE product_id NOT IN (SELECT keep_id FROM v_pair)
+      UNION ALL
+      SELECT oi.id + (SELECT max(id) FROM public.order_items), oi.order_id, v.keep_id, oi.quantity, oi.unit_price
+      FROM public.order_items oi JOIN v_pair v ON v.copy_id = oi.product_id;
