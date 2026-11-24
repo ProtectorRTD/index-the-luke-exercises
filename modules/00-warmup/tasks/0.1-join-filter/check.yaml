@@ -4,3 +4,27 @@ type: query
 ordered: false
 rules:
   - results_equal: true
+
+variants:
+  - name: три доставленных заказа клиентов из CZ вернулись в pending
+    sql: |
+      CREATE TEMP TABLE v_ids AS
+      SELECT o.id FROM public.orders o JOIN public.customers c ON c.id = o.customer_id
+      WHERE c.country = 'CZ' AND o.status = 'delivered' ORDER BY o.id LIMIT 3;
+      CREATE TEMP VIEW orders AS
+      SELECT id, customer_id,
+             CASE WHEN id IN (SELECT id FROM v_ids) THEN 'pending' ELSE status END AS status,
+             created_at,
+             CASE WHEN id IN (SELECT id FROM v_ids) THEN NULL ELSE shipped_at END AS shipped_at,
+             total
+      FROM public.orders;
+  - name: клиент из CZ с заказами в pending переехал в SK
+    sql: |
+      CREATE TEMP TABLE v_ids AS
+      SELECT min(o.customer_id) AS id FROM public.orders o JOIN public.customers c ON c.id = o.customer_id
+      WHERE c.country = 'CZ' AND o.status = 'pending';
+      CREATE TEMP VIEW customers AS
+      SELECT id, email, first_name, last_name,
+             CASE WHEN id IN (SELECT id FROM v_ids) THEN 'SK' ELSE country END AS country,
+             phone, created_at, deleted_at
+      FROM public.customers;

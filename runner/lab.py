@@ -123,10 +123,34 @@ def current_scale():
         return ""
 
 
+FULL_STATS_SQL = """
+DO $$
+DECLARE r record;
+BEGIN
+    FOR r IN
+        SELECT c.relname, a.attname FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = 1
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+          AND c.relname IN (SELECT name FROM lab_meta.manifest WHERE kind = 'r')
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I SET STATISTICS 10000', r.relname, r.attname);
+        EXECUTE format('ANALYZE public.%I', r.relname);
+    END LOOP;
+END $$;
+INSERT INTO lab_meta.settings VALUES ('stats', 'full') ON CONFLICT (key) DO UPDATE SET value = 'full';
+"""
+
+
 def require_seed():
     scale = current_scale()
     if not scale:
         raise LabError("База пустая. Сначала запустите: lab seed --scale s")
+    if scalar("SELECT count(*) FROM lab_meta.settings WHERE key = 'stats'") == "0":
+        # База сгенерирована до того, как статистику стали собирать по всей таблице.
+        # Обновляем один раз, данные не меняются.
+        print("Обновляю статистику планировщика (один раз, около минуты)...", flush=True)
+        psql(FULL_STATS_SQL, timeout=3600)
     return scale
 
 
@@ -284,6 +308,16 @@ DEALLOCATE ALL;
 """
 
 
+def base_table_changes():
+    """Счётчики изменённых строк по базовым таблицам (включая откатившиеся транзакции)."""
+    psql("SELECT pg_stat_force_next_flush();")
+    rows = psql("""
+        SELECT relname, n_tup_upd + n_tup_del + n_tup_ins FROM pg_stat_user_tables
+        WHERE schemaname = 'public' AND relname IN (SELECT name FROM lab_meta.manifest WHERE kind = 'r')
+    """, csv_out=True)
+    return {r[0]: int(r[1]) for r in csv.reader(io.StringIO(rows))}
+
+
 def modified_base_tables():
     """Базовые таблицы, в которых менялись данные после генерации."""
     psql("SELECT pg_stat_force_next_flush();")
@@ -341,9 +375,16 @@ def normalize_value(v):
     return v
 
 
-def run_rows(query, *, writes=False, settings=None, timeout_s=300):
-    script = (tx_begin(writes) + f"\nSET LOCAL statement_timeout = '{timeout_s}s';\n"
-              + settings_sql(settings) + query + ";\nROLLBACK;\n")
+def run_rows(query, *, writes=False, settings=None, timeout_s=300, pre=None):
+    """pre: изменение данных перед запросом (вариант данных). Всё откатывается,
+    а сам запрос после изменения выполняется в режиме только чтения."""
+    block = ""
+    if pre:
+        block = pre.rstrip().rstrip(";") + ";\n"
+        if not writes:
+            block += "SET LOCAL transaction_read_only = on;\n"
+    script = (tx_begin(writes or bool(pre)) + f"\nSET LOCAL statement_timeout = '{timeout_s}s';\n"
+              + settings_sql(settings) + block + query + ";\nROLLBACK;\n")
     out = psql(script, csv_out=True, timeout=timeout_s + 30)
     return [tuple(normalize_value(x) for x in row) for row in csv.reader(io.StringIO(out))]
 
@@ -656,6 +697,30 @@ def apply_index_solution(task, path, res, limits):
     return new
 
 
+def compare_rows(res, prefix, exp_rows, got_rows, ordered, variant=None):
+    if not ordered:
+        exp_rows, got_rows = sorted(exp_rows), sorted(got_rows)
+    ok = exp_rows == got_rows
+    where = f" на изменённых данных ({variant})" if variant else ""
+    detail = ""
+    if not ok:
+        detail = f" (строк: ожидалось {len(exp_rows)}, получено {len(got_rows)}"
+        if exp_rows and got_rows and len(exp_rows[0]) != len(got_rows[0]):
+            detail += f"; колонок: ожидалось {len(exp_rows[0])}, получено {len(got_rows[0])}"
+        elif len(exp_rows) == len(got_rows):
+            diff = next((i for i, (a, b) in enumerate(zip(exp_rows, got_rows)) if a != b), None)
+            if diff is not None:
+                detail += f"; первое расхождение в строке {diff + 1}"
+        detail += ")"
+        if variant:
+            res.headline.append(f"{prefix}результат не совпадает с эталоном{where}")
+        else:
+            res.headline.append(f"{prefix}результат не совпадает с эталоном: получено строк {len(got_rows)}, "
+                                f"ожидалось {len(exp_rows)}")
+    res.add(ok, prefix + "результат совпадает с эталоном" + ("" if not ordered else ", включая порядок")
+            + where + detail)
+
+
 def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, baseline=None,
                    force_plan=False):
     writes = bool(task.get("writes"))
@@ -673,31 +738,20 @@ def evaluate_query(task, spec, query, res, scale, *, label="", reference=None, b
     if want_results:
         if reference is None:
             raise LabError("для results_equal нет эталонного запроса")
-        exp_rows = run_rows(reference, writes=writes, settings=settings)
-        try:
-            got_rows = run_rows(query, writes=writes, settings=settings)
-        except SolutionError:
-            raise
-        except LabError as e:
-            raise SolutionError(f"{prefix}запрос не выполнился: {first_error_line(e)}\n{e}")
         ordered = spec.get("ordered", task.get("ordered", False))
-        if not ordered:
-            exp_rows, got_rows = sorted(exp_rows), sorted(got_rows)
-        ok = exp_rows == got_rows
-        detail = ""
-        if not ok:
-            detail = f" (строк: ожидалось {len(exp_rows)}, получено {len(got_rows)}"
-            if exp_rows and got_rows and len(exp_rows[0]) != len(got_rows[0]):
-                detail += f"; колонок: ожидалось {len(exp_rows[0])}, получено {len(got_rows[0])}"
-            elif len(exp_rows) == len(got_rows):
-                diff = next((i for i, (a, b) in enumerate(zip(exp_rows, got_rows)) if a != b), None)
-                if diff is not None:
-                    detail += f"; первое расхождение в строке {diff + 1}"
-            detail += ")"
-            res.headline.append(f"{prefix}результат не совпадает с эталоном: получено строк {len(got_rows)}, "
-                                f"ожидалось {len(exp_rows)}")
-        res.add(ok, prefix + "результат совпадает с эталоном" + ("" if not ordered else ", включая порядок")
-                + detail)
+        # Сначала исходные данные, потом варианты: те же запросы на изменённых данных
+        # (изменение откатывается). Так ловится запрос, который совпал с эталоном случайно.
+        for variant in [None] + list(spec.get("variants") or []):
+            pre = variant["sql"] if variant else None
+            exp_rows = run_rows(reference, writes=writes, settings=settings, pre=pre)
+            try:
+                got_rows = run_rows(query, writes=writes, settings=settings, pre=pre)
+            except SolutionError:
+                raise
+            except LabError as e:
+                where = f" на изменённых данных ({variant['name']})" if variant else ""
+                raise SolutionError(f"{prefix}запрос не выполнился{where}: {first_error_line(e)}\n{e}")
+            compare_rows(res, prefix, exp_rows, got_rows, ordered, variant["name"] if variant else None)
     plan_rules = [r for r in rules if rule_label(r)[0] in PLAN_RULES]
     if not plan_rules and not force_plan:
         return
@@ -1135,7 +1189,7 @@ def cmd_seed(args):
     psql(f"""
         CREATE TABLE lab_meta.settings (key text PRIMARY KEY, value text);
         INSERT INTO lab_meta.settings VALUES ('scale', '{args.scale}'),
-            ('seeded_at', now()::text);
+            ('seeded_at', now()::text), ('stats', 'full');
     """)
     write_manifest()
     sizes_out = psql("""
@@ -1293,6 +1347,7 @@ def selftest_task(task, args, scale):
     if True:
         sdir = solution_dir(task)
         checks = []
+        changes_before = base_table_changes()
         # 1. эталон проходит (несколько раз подряд: план стабилен)
         files = {p.name: p for p in sdir.glob("*.sql")}
         override = None
@@ -1347,6 +1402,12 @@ def selftest_task(task, args, scale):
                                sorted(orig) == sorted(ref), None))
             except LabError as e:
                 checks.append((f"сравнение с исходным запросом: {e}", False, None))
+        # 5. проверка не трогает данные базовых таблиц: варианты данных только подменяют
+        #    таблицы временными представлениями, даже откатившийся UPDATE оставил бы мусор в таблице
+        changes_after = base_table_changes()
+        touched = sorted(t for t, n in changes_after.items() if n > changes_before.get(t, 0))
+        if touched:
+            checks.append(("проверка меняет данные базовых таблиц: " + ", ".join(touched), False, None))
         ok_all = all(ok for _, ok, _ in checks)
         print(("  " + green("OK  ") if ok_all else "  " + red("FAIL")) + f" {task['id']} {task['title']}")
         if not ok_all or args.verbose:

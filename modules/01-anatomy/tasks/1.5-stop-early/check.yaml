@@ -4,3 +4,14 @@ type: query
 rules:
   - results_equal: true
   - max_buffers: { s: 10, m: 10 }
+
+variants:
+  - name: у клиента 17 нет ни одного доставленного заказа
+    sql: |
+      CREATE TEMP VIEW orders AS
+      SELECT id, customer_id,
+             CASE WHEN customer_id = 17 AND status = 'delivered' THEN 'cancelled' ELSE status END AS status,
+             created_at,
+             CASE WHEN customer_id = 17 AND status = 'delivered' THEN NULL ELSE shipped_at END AS shipped_at,
+             total
+      FROM public.orders;
