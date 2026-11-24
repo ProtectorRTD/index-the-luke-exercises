@@ -1,14 +1,14 @@
 # Задание 1.11. Впишите ответы после двоеточия, числа цифрами.
-level_fresh:
-level_churned:
-leaf_pages_fresh:
-leaf_pages_churned:
-density_churned:
-range_rows_fresh:
-range_rows_churned:
-range_buffers_fresh:
-range_buffers_churned:
-leaf_pages_rebuilt:
+level_fresh: 2
+level_churned: 2
+leaf_pages_fresh: 726
+leaf_pages_churned: 726
+density_churned: 12.08
+range_rows_fresh: 201819
+range_rows_churned: 20232
+range_buffers_fresh: 199
+range_buffers_churned: 199
+leaf_pages_rebuilt: 96
 
 # yes или no
-depth_grew:
+depth_grew: no
